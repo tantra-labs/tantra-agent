@@ -4,8 +4,8 @@
 
 ## Phase / Slice Status
 
-- **Rename to Tantra (plan `tantra-labs` 0004, 2026-11-12)**: workspace renamed `vyapaar-*` →
-  `tantra-*` (crates, paths, docs). **Pre-existing, non-rename failure**: `test_architectural_dependency_rules`
+- **Rename to Tantra (plan `tantra-labs` 0004, 2026-11-12)**: workspace renamed to `tantra-*`
+  (crates, paths, docs). **Pre-existing, non-rename failure**: `test_architectural_dependency_rules`
   (R4) fails — `tantra-agent-mcp` depends on `tantra-ledger-allocation` since commit `28629d0`
   (plan 0007 Track 1 Phase 2, 2026-11-12); R4 predates it (`ef879be`, 2026-11-06). Decide: drop the
   dep or widen R4 to allow mcp.
