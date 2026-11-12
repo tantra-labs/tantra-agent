@@ -1,6 +1,6 @@
-# Vyapaar Risk Profiles Framework
+# Tantra Risk Profiles Framework
 
-Vyapaar defines five canonical risk profiles for portfolio construction, position sizing, and risk enforcement across the trading and investment lifecycle.
+Tantra defines five canonical risk profiles for portfolio construction, position sizing, and risk enforcement across the trading and investment lifecycle.
 
 ---
 

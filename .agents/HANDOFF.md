@@ -1,8 +1,14 @@
-# HANDOFF — vyapaar-agent
+# HANDOFF — tantra-agent
 
-**Date**: 2026-11-12 · Repo: `vyapaar-agent` · Branch: `main`
+**Date**: 2026-11-12 · Repo: `tantra-agent` · Branch: `main`
 
 ## Phase / Slice Status
+
+- **Rename to Tantra (plan `tantra-labs` 0004, 2026-11-12)**: workspace renamed `vyapaar-*` →
+  `tantra-*` (crates, paths, docs). **Pre-existing, non-rename failure**: `test_architectural_dependency_rules`
+  (R4) fails — `tantra-agent-mcp` depends on `tantra-ledger-allocation` since commit `28629d0`
+  (plan 0007 Track 1 Phase 2, 2026-11-12); R4 predates it (`ef879be`, 2026-11-06). Decide: drop the
+  dep or widen R4 to allow mcp.
 
 - **Docs overhaul (2026-11-12)**: the historical `docs/roadmap/` was dismantled into
   `docs/design/`, `docs/gaps/`, `docs/plans/` and the whole set rewritten to match the source.
@@ -29,15 +35,15 @@
   crates/*/src/` is empty, then update `code-guardrails.md`/`code-migration-map.md`.
 - Persistent memory & Phase E work continues under plan 0009 (gaps 0003–0007).
 - Future chat-tool/MCP breadth continues under active plan 0007; open data blockers are the
-  filed upstream gaps — `vyapaar-market/docs/gaps/0001` (chain reader),
-  `vyapaar-data/docs/gaps/0008`+`0009` (bridge + ingestion) — alongside the standing
-  `vyapaar-data` 0005/0006/0007 ingestion/bridge gaps.
+  filed upstream gaps — `tantra-market/docs/gaps/0001` (chain reader),
+  `tantra-data/docs/gaps/0008`+`0009` (bridge + ingestion) — alongside the standing
+  `tantra-data` 0005/0006/0007 ingestion/bridge gaps.
 
 New **plan 0010** (proposed, 2026-11-12): institutional/smart-money flow detection suite —
 `institutional_flows`, `delivery_analysis`, `oi_buildup` tools (catalogue would go 19 → 22) plus
-a composite-signal strategy in `vyapaar-strategies`. Filed two new upstream gaps alongside the
-plan: `vyapaar-data/docs/gaps/0013` (FII/DII flows), `vyapaar-data/docs/gaps/0014` (delivery %);
-and `vyapaar-market/docs/gaps/0002` (OI history/buildup, sequenced after that repo's 0001). No
+a composite-signal strategy in `tantra-strategies`. Filed two new upstream gaps alongside the
+plan: `tantra-data/docs/gaps/0013` (FII/DII flows), `tantra-data/docs/gaps/0014` (delivery %);
+and `tantra-market/docs/gaps/0002` (OI history/buildup, sequenced after that repo's 0001). No
 tool/port code written yet — plan is scoping-only pending go-ahead.
 
 ## Decisions & Discoveries
@@ -51,11 +57,11 @@ tool/port code written yet — plan is scoping-only pending go-ahead.
   (unlike the LocalWrite alert CRUD, which sits outside so its count-pin invariant stays
   untouched). Plan 0006 §2's flat-registry decision stands (revisit at ~40).
 - Phase 4 port semantics: `OptionContract.option_type` is the canonical FNO symbol-grammar
-  string ("CE"/"PE", mirroring `vyapaar-market-finance`'s `OptionType`); `OptionsChain` carries
+  string ("CE"/"PE", mirroring `tantra-market-finance`'s `OptionType`); `OptionsChain` carries
   the underlying + snapshot time, contracts ordered by expiry/strike/type; chain cap 500
   (`MAX_CHAIN_CONTRACTS`, mirroring `MAX_BARS_LIMIT`). `CorporateAction.action_type` is the
   canonical `"dividend"|"split"|"bonus"|"rights"` set mirroring
-  `vyapaar_data.domain.corporate_actions`' value objects; ratios are exact `Quantity` pairs
+  `tantra_data.domain.corporate_actions`' value objects; ratios are exact `Quantity` pairs
   (`ratio_from`/`ratio_to`), dividends carry `Option<Money>` per-share amounts; list cap 20
   default / 50 (`DEFAULT_ACTIONS_LIMIT`/`MAX_ACTIONS_LIMIT`, content-tools precedent).
 - Content port semantics: news `instruments` are free-form mention tags (never parsed as
@@ -64,11 +70,11 @@ tool/port code written yet — plan is scoping-only pending go-ahead.
   (`corporate_action`, `shareholding`, `insider_trade`, `fund_holding`, `annual_report`,
   `quarterly_result`, `other`). Both tools accept `limit` (default 20, cap 50) enforced at the
   tool layer via `effective_limit`.
-- Filings upstream reality: `vyapaar-data` (Python) ingests filings (`LakehouseFilingsReader`,
+- Filings upstream reality: `tantra-data` (Python) ingests filings (`LakehouseFilingsReader`,
   closed gap 0003) but no Rust consumer can reach that lakehouse — the standing
-  `vyapaar-data` → Rust FFI bridge is now gap `vyapaar-data/docs/gaps/0007-filings-rust-bridge.md`
-  (the market-reference sample stores in `vyapaar-runtime` stub against the same missing bridge).
-  News has no ingestion anywhere → `vyapaar-data/docs/gaps/0006-news-ingestion.md`.
+  `tantra-data` → Rust FFI bridge is now gap `tantra-data/docs/gaps/0007-filings-rust-bridge.md`
+  (the market-reference sample stores in `tantra-runtime` stub against the same missing bridge).
+  News has no ingestion anywhere → `tantra-data/docs/gaps/0006-news-ingestion.md`.
 - `ToolRisk::LocalWrite` on the chat agent triggers the existing Interactive permission prompt
   per mutating call (`ToolTraits::new` also forces serial execution for non-ReadOnly) — no
   engine change was needed.
@@ -78,10 +84,10 @@ tool/port code written yet — plan is scoping-only pending go-ahead.
   a consumer needs one).
 - Toolchain's clippy (rust-1.97) flags `map_or(true, ..)` as `unnecessary_map_or`; use
   `is_none_or` in new code.
-- Live GGUF inference tests (`vyapaar-agent-llm/tests/candle_gguf_tests.rs::test_live_zenfinance_*`)
+- Live GGUF inference tests (`tantra-agent-llm/tests/candle_gguf_tests.rs::test_live_zenfinance_*`)
   are `#[ignore]`d: whenever `models/zenfinance-3b-Instruct.Q4_K_M.gguf` exists (2 GB) they run
   minutes of real 3B inference inside the default gate — machine-dependent and CI-impossible.
-  Same policy as 4B's OmniRoute live tests; runnable via `cargo test -p vyapaar-agent-llm
+  Same policy as 4B's OmniRoute live tests; runnable via `cargo test -p tantra-agent-llm
   --test candle_gguf_tests -- --ignored`.
 
 ## Operating Invariants

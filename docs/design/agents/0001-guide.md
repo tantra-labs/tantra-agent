@@ -1,15 +1,15 @@
-# Vyapaar AI Capabilities & Quantitative Research Desk Playbook
+# Tantra AI Capabilities & Quantitative Research Desk Playbook
 
-Welcome to **Vyapaar**, an institutional-grade quantitative finance platform and AI research desk. Vyapaar bridges generative AI reasoning with deterministic quantitative execution, high-performance backtesting, real-time risk control, and multi-asset portfolio accounting.
+Welcome to **Tantra**, an institutional-grade quantitative finance platform and AI research desk. Tantra bridges generative AI reasoning with deterministic quantitative execution, high-performance backtesting, real-time risk control, and multi-asset portfolio accounting.
 
 ---
 
 ## 1. Operating Principles & Safety Architecture
 
 1. **Advisory Only (NoFX Untrusted AI Principle)**:
-   Vyapaar agents function strictly as research analysts and signal proposers. No AI model directly executes orders with a broker or bypasses pre-trade risk checks. Every trading proposal must pass through the typed decision boundary (`vyapaar_core::Decision`), validated against circuit bands and portfolio limits by `vyapaar-risk`.
+   Tantra agents function strictly as research analysts and signal proposers. No AI model directly executes orders with a broker or bypasses pre-trade risk checks. Every trading proposal must pass through the typed decision boundary (`tantra_core::Decision`), validated against circuit bands and portfolio limits by `tantra-risk`.
 2. **Grounded Data**:
-   All prices, returns, indicators, fundamentals, and portfolio positions must be fetched via live tool execution (`market_quote`, `market_history`, `market_indicators`, `screener_query`, `macro_series`, `portfolio_view`). Vyapaar agents never hallucinate financial figures.
+   All prices, returns, indicators, fundamentals, and portfolio positions must be fetched via live tool execution (`market_quote`, `market_history`, `market_indicators`, `screener_query`, `macro_series`, `portfolio_view`). Tantra agents never hallucinate financial figures.
 3. **Exact Decimal Arithmetic (Zero Floats)**:
    Financial calculations use exact 128-bit decimal arithmetic (`rust_decimal::Decimal`). Derived metrics such as CAGR, risk-based position sizing, and statutory market charges (STT, GST, stamp duty) must be computed using `research_calc`.
 4. **Indian Market Grounding**:
@@ -97,11 +97,11 @@ High-precision financial calculations using deterministic decimal math.
 
 ## 3. Specialized Multi-Agent Personas
 
-Vyapaar includes 9 specialized agent personas tailored for distinct investment and trading disciplines:
+Tantra includes 9 specialized agent personas tailored for distinct investment and trading disciplines:
 
 | Persona | Primary Focus | Key Tools |
 | :--- | :--- | :--- |
-| **VyapaarAI** | Generalist financial analyst & research desk lead | `market_quote`, `market_history`, `screener_query`, `macro_series`, `portfolio_view`, `research_calc` |
+| **TantraAI** | Generalist financial analyst & research desk lead | `market_quote`, `market_history`, `screener_query`, `macro_series`, `portfolio_view`, `research_calc` |
 | **Analyst** | Fundamental equity research & forensic financial statement reading | `screener_query`, `market_quote`, `market_history`, `research_calc`, `web_search` |
 | **Quant** | Statistical modeling, factor research, backtesting & walk-forward validation | `market_history`, `market_indicators`, `backtest_run`, `walk_forward_validate`, `research_calc` |
 | **Trader** | Price action, technical levels, tactical setups & risk-reward trade plans | `market_quote`, `market_history`, `market_indicators`, `research_calc` |

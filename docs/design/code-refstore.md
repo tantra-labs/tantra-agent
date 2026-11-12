@@ -1,7 +1,7 @@
-# `vyapaar-agent` — Data Reference Store Reference
+# `tantra-agent` — Data Reference Store Reference
 
-Documents `vyapaar-agent-core/src/ref_store.rs`: the ephemeral in-memory data reference
-store emitting `$vyapaar/ref/<uuid>` URIs.
+Documents `tantra-agent-core/src/ref_store.rs`: the ephemeral in-memory data reference
+store emitting `$tantra/ref/<uuid>` URIs.
 
 ## Purpose
 
@@ -22,7 +22,7 @@ pub struct DataReferenceStore {
 | Method | Signature | Behavior |
 |--------|-----------|----------|
 | `new` | `() -> Self` | Empty store |
-| `export` | `(reference_id, data: Value) -> String` | Persists payload, returns `$vyapaar/ref/<reference_id>` |
+| `export` | `(reference_id, data: Value) -> String` | Persists payload, returns `$tantra/ref/<reference_id>` |
 | `resolve` | `(&reference_uri) -> Option<Value>` | Rehydrates a previously exported payload |
 | `len` | `() -> usize` | Cached entry count |
 | `is_empty` | `() -> bool` | True when no entries |
@@ -33,7 +33,7 @@ pub struct DataReferenceStore {
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `uri` | `String` | Full `$vyapaar/ref/<reference_id>` URI |
+| `uri` | `String` | Full `$tantra/ref/<reference_id>` URI |
 | `data` | `serde_json::Value` | Cached payload |
 | `size_bytes` | `usize` | Serialised payload size (telemetry / cap checks) |
 | `created_at` | `DateTime<Utc>` | Creation timestamp |
@@ -42,18 +42,18 @@ pub struct DataReferenceStore {
 
 All stored values are arbitrary `serde_json::Value`s; any `Decimal`-derived numbers are
 serialised to the model as JSON strings so precision survives the wire (matching the
-`vyapaar-agent-core::result` precision contract `"exact_decimal_zero_floats"`).
+`tantra-agent-core::result` precision contract `"exact_decimal_zero_floats"`).
 
 ## Note on Test Placement (gap 0001)
 
 This file currently contains an inline `#[cfg(test)] mod tests` block (four unit tests),
 which violates the workspace TDD rule forbidding in-file `#[test]` in production `src/`.
-These tests are to be moved to `crates/vyapaar-agent-core/tests/ref_store_tests.rs`.
+These tests are to be moved to `crates/tantra-agent-core/tests/ref_store_tests.rs`.
 A second inline `#[cfg(test)]` block exists in
-`crates/vyapaar-agent-research/src/verify/mod.rs`; both violations are tracked as
+`crates/tantra-agent-research/src/verify/mod.rs`; both violations are tracked as
 **gap 0001** and planned in **plan 0008** (see `docs/gaps/0001-inline-tests-in-ref-store.md`).
 
 ## Related
 
-- `vyapaar-agent-core/src/result.rs` — `VyapaarResultEnvelope.refs` holds these URIs.
-- `vyapaar-agent-mcp/src/server.rs` — `McpServer.data_store: DataReferenceStore`.
+- `tantra-agent-core/src/result.rs` — `TantraResultEnvelope.refs` holds these URIs.
+- `tantra-agent-mcp/src/server.rs` — `McpServer.data_store: DataReferenceStore`.

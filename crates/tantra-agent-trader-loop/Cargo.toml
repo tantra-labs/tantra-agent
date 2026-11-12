@@ -1,0 +1,22 @@
+[package]
+name = "tantra-agent-trader-loop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tokio.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+tantra-core = { workspace = true }
+tantra-risk = { workspace = true }
+tantra-agent-core = { path = "../tantra-agent-core" }
+tantra-agent-llm = { path = "../tantra-agent-llm" }
+tantra-agent-prompt = { path = "../tantra-agent-prompt" }
+
+[dev-dependencies]
+async-trait.workspace = true
+rust_decimal.workspace = true
+rust_decimal_macros.workspace = true
+tantra-agent-replay = { path = "../tantra-agent-replay" }

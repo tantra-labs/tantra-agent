@@ -1,6 +1,6 @@
-# `vyapaar-agent` — Prompt Assembly & Deterministic Hashing Reference
+# `tantra-agent` — Prompt Assembly & Deterministic Hashing Reference
 
-Documents `vyapaar-agent-core/src/prompt.rs`: versioned prompt assembly, context
+Documents `tantra-agent-core/src/prompt.rs`: versioned prompt assembly, context
 serialization, and canonical SHA-256 prompt hashing for deterministic replay.
 
 ## `PromptAssembly`
@@ -31,7 +31,7 @@ prompt-cache hits.
 ## Deterministic Replay Contract
 
 Every prompt, system completion, seed, and temperature is SHA-256 hashed and archived
-(`vyapaar-agent-replay`) for deterministic backtest replay. The hash of a `PromptAssembly`
+(`tantra-agent-replay`) for deterministic backtest replay. The hash of a `PromptAssembly`
 must be stable for a given `cached_prefix` + `turn_context` pair (cache hit) and change when
 either varies (cache miss).
 
@@ -42,7 +42,7 @@ No cache-hit/cache-miss regression tests exist yet for prompt caching. See
 
 ## Related
 
-- `vyapaar-agent-replay` — SHA-256 cassette store, `hash_request` canonical request hashing.
-- `vyapaar-agent-prompt` — versioned prompt templates, chat base prompts, section renderers.
-- `vyapaar-agent-trader-loop` — builds trading-decision system prompt via
+- `tantra-agent-replay` — SHA-256 cassette store, `hash_request` canonical request hashing.
+- `tantra-agent-prompt` — versioned prompt templates, chat base prompts, section renderers.
+- `tantra-agent-trader-loop` — builds trading-decision system prompt via
   `render_trading_decision_system_prompt`.

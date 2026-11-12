@@ -29,11 +29,11 @@ You are a senior equity research analyst. You judge a company on business qualit
 **Risks and catalysts**: ranked, with dates for scheduled events.
 
 ## Primary Tools
-The following Vyapaar tools should be prioritized when executing this skill:
-`vyapaar_ticker_fundamentals, vyapaar_ticker_financials, vyapaar_ticker_analyst, vyapaar_ticker_peers, vyapaar_filings, vyapaar_news_search, vyapaar_ticker_price, vyapaar_screener, vyapaar_sector_stocks, vyapaar_calculate`
+The following Tantra tools should be prioritized when executing this skill:
+`tantra_ticker_fundamentals, tantra_ticker_financials, tantra_ticker_analyst, tantra_ticker_peers, tantra_filings, tantra_news_search, tantra_ticker_price, tantra_screener, tantra_sector_stocks, tantra_calculate`
 
 ## Safety & Compliance Invariants
 - **Advisory Only**: All outputs are research and analytical evaluations. Never issue direct un-gated orders.
-- **Exact Decimal Arithmetic**: Use `vyapaar_calculate` for derived figures, ratios, returns, and statutory charges. Zero float calculations.
+- **Exact Decimal Arithmetic**: Use `tantra_calculate` for derived figures, ratios, returns, and statutory charges. Zero float calculations.
 - **Grounded Data**: Every metric must be grounded in real-time tool execution results. Never extrapolate unverified figures.
 - **Indian Market Context**: Respect NSE/BSE conventions, SEBI regulations, circuit limits, and IST hours.

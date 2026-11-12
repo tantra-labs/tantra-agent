@@ -1,0 +1,26 @@
+[package]
+name = "tantra-agent-report"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Embedded Typst / Markdown quantitative research tearsheet generator with optional LLM narrative narration"
+
+[features]
+default = []
+llm = ["dep:tantra-agent-llm"]
+
+[dependencies]
+tantra-core = { workspace = true }
+tantra-agent-analytics = { workspace = true }
+tantra-agent-llm = { path = "../tantra-agent-llm", optional = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+futures = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+
+[[test]]
+name = "omniroute_integration"
+path = "tests/omniroute_integration.rs"
+required-features = ["llm"]

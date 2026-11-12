@@ -1,12 +1,12 @@
 {
   "version": "1.0.0",
-  "description": "Default bundled agent skills packaged with vyapaar-agent / vyapaar-cli installation.",
+  "description": "Default bundled agent skills packaged with tantra-agent / tantra-cli installation.",
   "skills": [
     {
-      "id": "vyapaar-ai",
-      "title": "VyapaarAI",
+      "id": "tantra-ai",
+      "title": "TantraAI",
       "tagline": "The all-round analyst. Picks the tools, lenses and depth each question needs.",
-      "path": "vyapaar-ai/SKILL.md",
+      "path": "tantra-ai/SKILL.md",
       "builtin": true
     },
     {

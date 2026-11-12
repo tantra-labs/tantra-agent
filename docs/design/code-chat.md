@@ -1,6 +1,6 @@
-# `vyapaar-agent` — Chat Assistant Reference
+# `tantra-agent` — Chat Assistant Reference
 
-Documents `vyapaar-agent-chat/src/`: conversational assistant engine, session persistence,
+Documents `tantra-agent-chat/src/`: conversational assistant engine, session persistence,
 turn state machine, permission gating, and event streaming (Design Doc 0001, Phase A —
 COMPLETED).
 
@@ -33,13 +33,13 @@ COMPLETED).
 
 ## Headless Runner
 
-`run_turn_headless` enables unattended CLI execution (used by `vyapaar-cli ask`).
+`run_turn_headless` enables unattended CLI execution (used by `tantra-cli ask`).
 
 ## Dependency Rules (R1–R5)
 
-`vyapaar-agent-chat` must NOT depend on `vyapaar-runtime-*`, `vyapaar-exec-*`, or
-`vyapaar-market-*` (architecture R1–R3). External reads are inverted through ports in
-`vyapaar-agent-chat-tools::ports`. Regression-tested via `tests/dependency_rules.rs`
+`tantra-agent-chat` must NOT depend on `tantra-runtime-*`, `tantra-exec-*`, or
+`tantra-market-*` (architecture R1–R3). External reads are inverted through ports in
+`tantra-agent-chat-tools::ports`. Regression-tested via `tests/dependency_rules.rs`
 inspecting `cargo metadata`.
 
 ## Untrusted AI Principle
@@ -49,7 +49,7 @@ pipeline.
 
 ## Related
 
-- `vyapaar-agent-chat-tools` — the conversational tool catalogue and read ports; pure
+- `tantra-agent-chat-tools` — the conversational tool catalogue and read ports; pure
   `AgentTool`s are lifted via `PureToolAdapter` (see `code-chat-tools.md`).
-- `vyapaar-agent-core::prompt` — chat base prompts & section renderers.
+- `tantra-agent-core::prompt` — chat base prompts & section renderers.
 - Design Doc 0001 — conversational assistant & superset capabilities.

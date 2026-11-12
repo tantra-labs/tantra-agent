@@ -1,6 +1,6 @@
 # Plan 0008 — TDD Cleanup: Remove Inline Tests from `src/`
 
-> Renumbered from the original "plan 0002 (TDD Cleanup & `vyapaar-agent-chat-tools`)".
+> Renumbered from the original "plan 0002 (TDD Cleanup & `tantra-agent-chat-tools`)".
 > The chat-tools half of that plan is **implemented** (gap 0002 closed); only the TDD
 > cleanup half remains, tracking gap 0001.
 
@@ -9,8 +9,8 @@
 Close gap 0001: eliminate all inline `#[cfg(test)]` blocks from production `src/` files.
 Two locations remain:
 
-- `crates/vyapaar-agent-core/src/ref_store.rs` (inline `mod tests`, 4 tests).
-- `crates/vyapaar-agent-research/src/verify/mod.rs` (inline `mod verify_unit_tests`).
+- `crates/tantra-agent-core/src/ref_store.rs` (inline `mod tests`, 4 tests).
+- `crates/tantra-agent-research/src/verify/mod.rs` (inline `mod verify_unit_tests`).
 
 ## Gaps Tracked by This Plan
 
@@ -20,11 +20,11 @@ Two locations remain:
 
 ## Implementation Phases
 
-1. Move the four `ref_store.rs` tests into `crates/vyapaar-agent-core/tests/ref_store_tests.rs`.
-2. Move the `verify` unit tests into `crates/vyapaar-agent-research/tests/verify_tests.rs`.
+1. Move the four `ref_store.rs` tests into `crates/tantra-agent-core/tests/ref_store_tests.rs`.
+2. Move the `verify` unit tests into `crates/tantra-agent-research/tests/verify_tests.rs`.
 3. Delete both `#[cfg(test)]` blocks from `src/`.
 4. Verify `grep -rn "#\[cfg(test)\]" crates/*/src/` returns no matches.
-5. Run `cargo test -p vyapaar-agent-core -p vyapaar-agent-research --profile prod`, then
+5. Run `cargo test -p tantra-agent-core -p tantra-agent-research --profile prod`, then
    `cargo fmt --check` and `cargo clippy --all-targets --profile prod -- -D warnings`.
 
 ## Exit Criteria

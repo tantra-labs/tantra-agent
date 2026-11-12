@@ -1,0 +1,36 @@
+[package]
+name = "tantra-agent-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tokio.workspace = true
+futures.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+sha2 = "0.10"
+chrono.workspace = true
+rust_decimal.workspace = true
+rust_decimal_macros.workspace = true
+axum.workspace = true
+tracing.workspace = true
+tantra-core.workspace = true
+tantra-risk.workspace = true
+tantra-ledger-allocation.workspace = true
+tantra-market-pricing.workspace = true
+tantra-agent-core = { path = "../tantra-agent-core" }
+tantra-agent-analytics = { path = "../tantra-agent-analytics" }
+tantra-agent-llm = { path = "../tantra-agent-llm" }
+tantra-agent-forecast = { path = "../tantra-agent-forecast" }
+uuid.workspace = true
+bytes = "1.4"
+rand = "0.8"
+
+[dev-dependencies]
+reqwest.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+axum.workspace = true

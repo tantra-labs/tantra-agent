@@ -1,4 +1,4 @@
-# `vyapaar-agent` Agent Guidelines & Architecture Invariants
+# `tantra-agent` Agent Guidelines & Architecture Invariants
 
 **Subsystem**: Brain (AI Reasoning & Strategy Synthesis)
 **Language**: Rust + Python
@@ -7,9 +7,9 @@
 ---
 
 ## 1. Role & Architectural Hints
-* `vyapaar-agent` bridges AI intelligence with quantitative execution:
+* `tantra-agent` bridges AI intelligence with quantitative execution:
   1. **Untrusted AI Principle**: The AI cannot emit arbitrary shell commands or bypass risk limits.
-  2. **Closed Decision Grammar**: All AI responses must parse strictly into `vyapaar_core::Decision` via `#[serde(deny_unknown_fields)]`.
+  2. **Closed Decision Grammar**: All AI responses must parse strictly into `tantra_core::Decision` via `#[serde(deny_unknown_fields)]`.
   3. **Deterministic Replay Harness**: All prompts, system completions, seeds, and temperatures are SHA-256 hashed and archived in SQLite/Parquet for backtest auditability.
   4. **Model Context Protocol (MCP) Server**: Exposes market depth, technical indicators, account status, and order placement tools to external LLM agents.
   5. **StockSharp Odysseus Engine**: Genetic algorithm synthesis for discovering non-linear rule combinations.

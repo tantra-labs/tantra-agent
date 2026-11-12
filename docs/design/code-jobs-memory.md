@@ -1,9 +1,9 @@
-# `vyapaar-agent` — Job Scheduler, Memory Engine & Ports Reference
+# `tantra-agent` — Job Scheduler, Memory Engine & Ports Reference
 
-Documents `vyapaar-agent-core/src/jobs/` and `vyapaar-agent-core/src/memory/` plus the
-storage ports in `vyapaar-agent-core/src/ports/`.
+Documents `tantra-agent-core/src/jobs/` and `tantra-agent-core/src/memory/` plus the
+storage ports in `tantra-agent-core/src/ports/`.
 
-## Persistence Ports (`vyapaar-agent-core/src/ports/`)
+## Persistence Ports (`tantra-agent-core/src/ports/`)
 
 | Port | Purpose |
 |------|---------|
@@ -12,10 +12,10 @@ storage ports in `vyapaar-agent-core/src/ports/`.
 | `SessionScope`, `RuntimeMode` | Session scoping & runtime mode |
 | `StoreError`, `StoreErrorKind` | Storage error taxonomy |
 
-Ports are intentionally decoupled from concrete runtimes (`vyapaar-runtime-*` implements
+Ports are intentionally decoupled from concrete runtimes (`tantra-runtime-*` implements
 them; agent never depends on runtime per rule R1).
 
-## Job Scheduler (`vyapaar-agent-core/src/jobs/`)
+## Job Scheduler (`tantra-agent-core/src/jobs/`)
 
 Autonomous scheduled job engine with:
 - Cron evaluation (`cron.rs`).
@@ -27,7 +27,7 @@ Autonomous scheduled job engine with:
 Modules: `cron`, `jobs/mod`, `jobs/scheduler`, `jobs/spec`, `jobs/store`, `jobs/sqlite_store`,
 `jobs/memory_store`.
 
-## Memory Engine (`vyapaar-agent-core/src/memory/`)
+## Memory Engine (`tantra-agent-core/src/memory/`)
 
 Local financial memory engine layered over the `MemoryStore` port:
 
@@ -49,11 +49,11 @@ renderers exists yet. Ports and in-memory engine are present; `UserMemory` is pl
 ## Note (gap 0006)
 
 The agent-side job scheduler is implemented. What is missing is the runtime-side bridge that
-schedules and monitors agent jobs through `vyapaar-runtime`'s actor pipeline
+schedules and monitors agent jobs through `tantra-runtime`'s actor pipeline
 (`docs/gaps/0006-monitor-scheduler-bridge.md`, tracked by plan 0009).
 
 ## Related
 
-- `vyapaar-agent-core::tool` — `ToolSpec`, `ToolCall`, `ToolOutput`, `ToolError` (shared tool
+- `tantra-agent-core::tool` — `ToolSpec`, `ToolCall`, `ToolOutput`, `ToolError` (shared tool
   contracts).
-- `vyapaar-agent-prompt` — prompt templates & section renderers (recall rendering planned).
+- `tantra-agent-prompt` — prompt templates & section renderers (recall rendering planned).

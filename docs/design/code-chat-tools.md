@@ -1,15 +1,15 @@
-# `vyapaar-agent` — Chat Tools Reference
+# `tantra-agent` — Chat Tools Reference
 
-Documents `vyapaar-agent-chat-tools/`: the conversational read-only tool catalogue, the
+Documents `tantra-agent-chat-tools/`: the conversational read-only tool catalogue, the
 consumer-owned read ports, the pure-tool lift adapter, and the strategy advisory tools
 (Design Doc 0001 §6, plan 0006 expansions).
 
 ## Architectural Invariants
 
 - **Pure advisory (NoFX)**: chat tools never place orders or produce `Decision`s.
-- **Dependency rules (R1, R2, R4)**: depends on `vyapaar-ledger` for types only; zero
-  dependency on `vyapaar-runtime`, `vyapaar-exec`, `vyapaar-market`, or
-  `vyapaar-agent-trader-loop`. Market/portfolio reads are inverted through reader traits.
+- **Dependency rules (R1, R2, R4)**: depends on `tantra-ledger` for types only; zero
+  dependency on `tantra-runtime`, `tantra-exec`, `tantra-market`, or
+  `tantra-agent-trader-loop`. Market/portfolio reads are inverted through reader traits.
 
 ## Read Ports (`src/ports/`)
 
@@ -27,7 +27,7 @@ store is unavailable (`PortError::unavailable`).
 
 ## `PureToolAdapter` (`src/lift.rs`)
 
-Lifts pure, synchronous `AgentTool`s (`vyapaar-agent-tools`) into async conversational
+Lifts pure, synchronous `AgentTool`s (`tantra-agent-tools`) into async conversational
 `ChatTool`s without duplicating tool schemas or execution logic:
 
 - `lift_screener` → `ScreenerQueryTool`
@@ -58,13 +58,13 @@ pin.
 
 ## Tests
 
-- `crates/vyapaar-agent-chat-tools/tests/unit_tests.rs` pins the read-only catalogue count
+- `crates/tantra-agent-chat-tools/tests/unit_tests.rs` pins the read-only catalogue count
   (19) — bump the count doc comment and the assertion together when adding tools.
 
 ## Related
 
-- `vyapaar-agent-chat` — `ChatTool` trait, `ToolRisk`, `ToolRegistry`.
-- `vyapaar-agent-tools` — the pure `AgentTool` registry being lifted.
-- `vyapaar-agent-core::result` — `VyapaarResultEnvelope` used for tool outputs.
-- `docs/gaps/` — upstream data stores are owned by `vyapaar-market`/`vyapaar-data`; runtime
+- `tantra-agent-chat` — `ChatTool` trait, `ToolRisk`, `ToolRegistry`.
+- `tantra-agent-tools` — the pure `AgentTool` registry being lifted.
+- `tantra-agent-core::result` — `TantraResultEnvelope` used for tool outputs.
+- `docs/gaps/` — upstream data stores are owned by `tantra-market`/`tantra-data`; runtime
   provides `FeedMarketReader` / `RuntimeMarketReader` adapters implementing these ports.

@@ -29,11 +29,11 @@ You are a long-term value investor in the tradition of Graham, Buffett and Munge
 **What would change the view**: business deterioration or valuation triggers.
 
 ## Primary Tools
-The following Vyapaar tools should be prioritized when executing this skill:
-`vyapaar_ticker_fundamentals, vyapaar_ticker_financials, vyapaar_ticker_dividends, vyapaar_ticker_peers, vyapaar_filings, vyapaar_ticker_price, vyapaar_ticker_analyst, vyapaar_screener, vyapaar_calculate`
+The following Tantra tools should be prioritized when executing this skill:
+`tantra_ticker_fundamentals, tantra_ticker_financials, tantra_ticker_dividends, tantra_ticker_peers, tantra_filings, tantra_ticker_price, tantra_ticker_analyst, tantra_screener, tantra_calculate`
 
 ## Safety & Compliance Invariants
 - **Advisory Only**: All outputs are research and analytical evaluations. Never issue direct un-gated orders.
-- **Exact Decimal Arithmetic**: Use `vyapaar_calculate` for derived figures, ratios, returns, and statutory charges. Zero float calculations.
+- **Exact Decimal Arithmetic**: Use `tantra_calculate` for derived figures, ratios, returns, and statutory charges. Zero float calculations.
 - **Grounded Data**: Every metric must be grounded in real-time tool execution results. Never extrapolate unverified figures.
 - **Indian Market Context**: Respect NSE/BSE conventions, SEBI regulations, circuit limits, and IST hours.

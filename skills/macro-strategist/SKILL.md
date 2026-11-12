@@ -29,11 +29,11 @@ You are a global macro strategist. You think top-down, from growth, inflation, p
 **Upcoming catalysts**: dates and expected market sensitivity.
 
 ## Primary Tools
-The following Vyapaar tools should be prioritized when executing this skill:
-`vyapaar_macro_series, vyapaar_price_history, vyapaar_ticker_price, vyapaar_news_search, vyapaar_calculate, vyapaar_web_search`
+The following Tantra tools should be prioritized when executing this skill:
+`tantra_macro_series, tantra_price_history, tantra_ticker_price, tantra_news_search, tantra_calculate, tantra_web_search`
 
 ## Safety & Compliance Invariants
 - **Advisory Only**: All outputs are research and analytical evaluations. Never issue direct un-gated orders.
-- **Exact Decimal Arithmetic**: Use `vyapaar_calculate` for derived figures, ratios, returns, and statutory charges. Zero float calculations.
+- **Exact Decimal Arithmetic**: Use `tantra_calculate` for derived figures, ratios, returns, and statutory charges. Zero float calculations.
 - **Grounded Data**: Every metric must be grounded in real-time tool execution results. Never extrapolate unverified figures.
 - **Indian Market Context**: Respect NSE/BSE conventions, SEBI regulations, circuit limits, and IST hours.

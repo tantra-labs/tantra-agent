@@ -1,9 +1,9 @@
-# `vyapaar-agent` — Closed Decision Grammar & Parser Reference
+# `tantra-agent` — Closed Decision Grammar & Parser Reference
 
-Documents `vyapaar-agent-core/src/decision.rs`: the NoFX untrusted-AI closed decision
+Documents `tantra-agent-core/src/decision.rs`: the NoFX untrusted-AI closed decision
 grammar. Every LLM completion on the trading decision surface is parsed into
-`vyapaar_core::Decision` (`#[serde(deny_unknown_fields)]`), grounded against real-time
-`PriceBand`s, and clamped by `vyapaar_risk::RiskEngine`.
+`tantra_core::Decision` (`#[serde(deny_unknown_fields)]`), grounded against real-time
+`PriceBand`s, and clamped by `tantra_risk::RiskEngine`.
 
 ## Decision Surface
 
@@ -28,7 +28,7 @@ pub struct DecisionParser {
 ### Responsibilities
 
 1. **Closed-grammar parsing** (`parse_str`): strips markdown JSON fences, parses into
-   `vyapaar_core::Decision` with `serde(deny_unknown_fields)` — any unauthorized field
+   `tantra_core::Decision` with `serde(deny_unknown_fields)` — any unauthorized field
    injected by the model yields `DecisionError::UnknownField` or `DecisionError::Json`.
 2. **Lenient coercion**: numbers for `qty`/`price_limit`/`new_qty`/`new_price` are
    coerced to strings; `side` uppercased; `action` lowercased — one repair attempt
@@ -41,12 +41,12 @@ pub struct DecisionParser {
    - **Price-band grounding**: limit must lie within `PriceBand::contains(limit)`.
    - **Price-collar grounding**: deviation from `reference_price` ≤ `max_price_deviation_pct`.
 4. **Pre-trade risk gate** (`evaluate_with_risk`): submits the validated decision to
-   `vyapaar_risk::RiskEngine::check_decision(decision, now)`; rejections surface as
+   `tantra_risk::RiskEngine::check_decision(decision, now)`; rejections surface as
    `DecisionError::RiskRejected`.
 
 ## Zero-Floats Note
 
-All prices/quantities are `rust_decimal::Decimal` (via `vyapaar_core::Price`). No
+All prices/quantities are `rust_decimal::Decimal` (via `tantra_core::Price`). No
 `f32`/`f64` appears in the decision surface.
 
 ## Errors (`DecisionError`)
@@ -67,6 +67,6 @@ All prices/quantities are `rust_decimal::Decimal` (via `vyapaar_core::Price`). N
 
 ## Related
 
-- `vyapaar_core::Decision` — closed enum (kernel).
-- `vyapaar_risk::RiskEngine` — pre-trade gate (gate subsystem).
-- `vyapaar_agent_trader_loop::TraderLoop` — wires parser → provider → risk gate.
+- `tantra_core::Decision` — closed enum (kernel).
+- `tantra_risk::RiskEngine` — pre-trade gate (gate subsystem).
+- `tantra_agent_trader_loop::TraderLoop` — wires parser → provider → risk gate.

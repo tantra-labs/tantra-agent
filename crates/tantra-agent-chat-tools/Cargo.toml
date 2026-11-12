@@ -1,0 +1,32 @@
+[package]
+name = "tantra-agent-chat-tools"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Conversational read-only chat tools and domain ports for tantra-agent"
+
+[lib]
+name = "tantra_agent_chat_tools"
+
+[dependencies]
+tantra-core = { workspace = true }
+tantra-ledger = { workspace = true }
+tantra-ledger-portfolio = { workspace = true }
+tantra-agent-core = { workspace = true }
+tantra-agent-chat = { workspace = true }
+tantra-agent-tools = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true, features = ["sync", "rt"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+rust_decimal = { workspace = true }
+rust_decimal_macros = { workspace = true }
+chrono = { workspace = true }
+schemars = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full", "macros"] }

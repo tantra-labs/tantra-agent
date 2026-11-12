@@ -1,0 +1,30 @@
+[package]
+name = "tantra-agent-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Core traits, closed decision parser, grounding checks, and indicator catalog for tantra-agent"
+
+[features]
+default = []
+# SQLite-backed JobStore (opt-in; keeps the core crate WASM-friendly without it).
+sqlx-store = ["dep:sqlx"]
+
+[dependencies]
+tantra-core = { workspace = true }
+tantra-risk = { workspace = true }
+serde.workspace = true
+serde_json.workspace = true
+rust_decimal.workspace = true
+rust_decimal_macros.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+sha2.workspace = true
+async-trait.workspace = true
+schemars.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+sqlx = { workspace = true, optional = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
