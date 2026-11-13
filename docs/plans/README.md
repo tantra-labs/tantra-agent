@@ -13,6 +13,7 @@ Per workspace rule `.agents/rules/gap-tracking.md`:
 | [0007](0007-comprehensive-mcp-ecosystem-and-agent-implementation-guide.md) | Comprehensive MCP Ecosystem Implementation Guide & Feature Coverage Audit | `tantra-agent-mcp`, `tantra-agent-chat-tools`, `tantra-agent-analytics`, `tantra-ledger`, `tantra-market`, `tantra-strategies`, `tantra-runtime`, `tantra-data` | Active — master guide (Longbridge 164 tools, Fincept 17 engines, jesse-mcp 32 tools); Phases 1–15 and 17 open; Phase 16 (SSE transport) shipped; Phase 17 = gap 0004 |
 | [0009](0009-persistent-memory-mcp-client-and-phase-e.md) | Persistent Memory, MCP Client Bridge & Phase E | `tantra-agent-core`, `tantra-agent-prompt`, `tantra-agent-mcp`, `tantra-agent-report`, `tantra-agent-research` | Open — tracks gaps 0003–0007 |
 | [0010](0010-institutional-smart-money-detection-suite.md) | Institutional / Smart-Money Flow Detection Suite | `tantra-agent-chat-tools`, `tantra-runtime-api(-rest)`, `tantra-strategies` | Proposed — composite signal (delivery-adjusted volume, shareholding/insider filings, block deals, OI buildup) over 3 new chat tools; depends on new upstream gaps `tantra-data` 0013/0014 and `tantra-market` 0002 |
+| [0011](0011-elephant-edge-level-map-chat-tools.md) | Elephant Edge Level-Map & OI-Wall Chat Tools | `tantra-agent-chat-tools`, `tantra-runtime-api(-rest)` | Proposed — `level_map` + `oi_walls` ReadOnly tools on `tantra-core` plan 0003 wire types; cites plan 0010; master plan root `docs/plans/0005` |
 
 ## Implemented Plans
 
