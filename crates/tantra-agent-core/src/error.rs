@@ -1,9 +1,9 @@
 //! Error types for tantra-agent-core.
 
 use rust_decimal::Decimal;
-use thiserror::Error;
 use tantra_core::{Price, PriceBand};
 use tantra_risk::RiskRefusal;
+use thiserror::Error;
 
 /// Errors arising during AI/LLM decision parsing and safety validation.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]

@@ -12,9 +12,9 @@ use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 
 use tantra_agent_analytics::{
-    FactorReturnPanel, PortfolioHolding, compute_factor_attribution,
-    evaluate_walk_forward, factor_attribution_blocks, fit_cross_sectional_factor_model,
-    fit_garch11, simulate_bootstrap, test_engle_granger,
+    FactorReturnPanel, PortfolioHolding, compute_factor_attribution, evaluate_walk_forward,
+    factor_attribution_blocks, fit_cross_sectional_factor_model, fit_garch11, simulate_bootstrap,
+    test_engle_granger,
 };
 pub use tantra_agent_analytics::{GarchConfig, GarchResult};
 
@@ -1233,13 +1233,18 @@ impl DerivativesToolService {
     }
 
     /// Prices an option and returns full Greeks and moneyness diagnostics.
-    pub fn price_derivatives(&self, args: &serde_json::Value) -> Result<serde_json::Value, McpError> {
+    pub fn price_derivatives(
+        &self,
+        args: &serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
         let spot = args
             .get("spot")
             .and_then(parse_decimal)
             .ok_or_else(|| McpError::InvalidArguments("missing or invalid 'spot'".to_string()))?;
         if spot <= Decimal::ZERO {
-            return Err(McpError::InvalidArguments("spot must be strictly positive".to_string()));
+            return Err(McpError::InvalidArguments(
+                "spot must be strictly positive".to_string(),
+            ));
         }
 
         let strike = args
@@ -1247,29 +1252,41 @@ impl DerivativesToolService {
             .and_then(parse_decimal)
             .ok_or_else(|| McpError::InvalidArguments("missing or invalid 'strike'".to_string()))?;
         if strike <= Decimal::ZERO {
-            return Err(McpError::InvalidArguments("strike must be strictly positive".to_string()));
+            return Err(McpError::InvalidArguments(
+                "strike must be strictly positive".to_string(),
+            ));
         }
 
         let t_years = args
             .get("t_years")
             .or_else(|| args.get("time_to_expiry"))
             .and_then(parse_decimal)
-            .ok_or_else(|| McpError::InvalidArguments("missing or invalid 't_years'".to_string()))?;
+            .ok_or_else(|| {
+                McpError::InvalidArguments("missing or invalid 't_years'".to_string())
+            })?;
         if t_years <= Decimal::ZERO {
-            return Err(McpError::InvalidArguments("t_years must be strictly positive".to_string()));
+            return Err(McpError::InvalidArguments(
+                "t_years must be strictly positive".to_string(),
+            ));
         }
 
         let risk_free_rate = args
             .get("risk_free_rate")
             .and_then(parse_decimal)
-            .ok_or_else(|| McpError::InvalidArguments("missing or invalid 'risk_free_rate'".to_string()))?;
+            .ok_or_else(|| {
+                McpError::InvalidArguments("missing or invalid 'risk_free_rate'".to_string())
+            })?;
 
         let volatility = args
             .get("volatility")
             .and_then(parse_decimal)
-            .ok_or_else(|| McpError::InvalidArguments("missing or invalid 'volatility'".to_string()))?;
+            .ok_or_else(|| {
+                McpError::InvalidArguments("missing or invalid 'volatility'".to_string())
+            })?;
         if volatility <= Decimal::ZERO {
-            return Err(McpError::InvalidArguments("volatility must be strictly positive".to_string()));
+            return Err(McpError::InvalidArguments(
+                "volatility must be strictly positive".to_string(),
+            ));
         }
 
         let dividend_yield = args
@@ -1302,9 +1319,9 @@ impl DerivativesToolService {
             option_type,
         };
 
-        let greeks = BlackScholesModel.greeks(&params).map_err(|e| {
-            McpError::InvalidArguments(format!("derivatives pricing error: {e}"))
-        })?;
+        let greeks = BlackScholesModel
+            .greeks(&params)
+            .map_err(|e| McpError::InvalidArguments(format!("derivatives pricing error: {e}")))?;
 
         let hundred = Decimal::from(100);
         let trading_days = Decimal::from(252);
@@ -1405,11 +1422,23 @@ impl DerivativesToolService {
                 columns: vec!["Property".to_string(), "Value".to_string()],
                 rows: vec![
                     vec!["Moneyness".to_string(), moneyness],
-                    vec!["Intrinsic Value".to_string(), format!("{:.4}", intrinsic_value)],
+                    vec![
+                        "Intrinsic Value".to_string(),
+                        format!("{:.4}", intrinsic_value),
+                    ],
                     vec!["Time Value".to_string(), format!("{:.4}", time_value)],
-                    vec!["Annualized Theta".to_string(), format!("{:.4}", greeks.theta)],
-                    vec!["Annualized Vega (100%)".to_string(), format!("{:.4}", greeks.vega)],
-                    vec!["Annualized Rho (100%)".to_string(), format!("{:.4}", greeks.rho)],
+                    vec![
+                        "Annualized Theta".to_string(),
+                        format!("{:.4}", greeks.theta),
+                    ],
+                    vec![
+                        "Annualized Vega (100%)".to_string(),
+                        format!("{:.4}", greeks.vega),
+                    ],
+                    vec![
+                        "Annualized Rho (100%)".to_string(),
+                        format!("{:.4}", greeks.rho),
+                    ],
                 ],
             });
 
@@ -1432,20 +1461,31 @@ impl VolatilityToolService {
     }
 
     /// Fits GARCH(1,1) model and outputs volatility forecasts and diagnostic envelope.
-    pub fn garch_volatility(&self, args: &serde_json::Value) -> Result<serde_json::Value, McpError> {
+    pub fn garch_volatility(
+        &self,
+        args: &serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
         let returns_val = args
             .get("returns")
             .and_then(|v| v.as_array())
             .ok_or_else(|| McpError::InvalidArguments("missing returns array".to_string()))?;
         let returns: Vec<f64> = returns_val.iter().filter_map(|v| v.as_f64()).collect();
         if returns.is_empty() {
-            return Err(McpError::InvalidArguments("returns array must not be empty".to_string()));
+            return Err(McpError::InvalidArguments(
+                "returns array must not be empty".to_string(),
+            ));
         }
 
         let p = args.get("p").and_then(|v| v.as_u64()).unwrap_or(1) as usize;
         let q = args.get("q").and_then(|v| v.as_u64()).unwrap_or(1) as usize;
-        let forecast_horizon = args.get("forecast_horizon").and_then(|v| v.as_u64()).unwrap_or(5) as usize;
-        let annualization = args.get("annualization").and_then(|v| v.as_f64()).unwrap_or(252.0);
+        let forecast_horizon = args
+            .get("forecast_horizon")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(5) as usize;
+        let annualization = args
+            .get("annualization")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(252.0);
 
         let config = GarchConfig {
             p,
@@ -1454,9 +1494,8 @@ impl VolatilityToolService {
             forecast_horizon,
         };
 
-        let result = fit_garch11(&returns, &config).map_err(|e| {
-            McpError::InvalidArguments(format!("GARCH fitting error: {e}"))
-        })?;
+        let result = fit_garch11(&returns, &config)
+            .map_err(|e| McpError::InvalidArguments(format!("GARCH fitting error: {e}")))?;
 
         let summary = format!(
             "GARCH(1,1) fitted: persistence={:.4}, latest_vol={:.2}%, unconditional_vol={:.2}%",
@@ -1472,7 +1511,9 @@ impl VolatilityToolService {
             },
             MetricItem {
                 label: "half_life".to_string(),
-                value: result.half_life.map_or("N/A".to_string(), |h| format!("{:.1} bars", h)),
+                value: result
+                    .half_life
+                    .map_or("N/A".to_string(), |h| format!("{:.1} bars", h)),
             },
             MetricItem {
                 label: "latest_annualized_vol".to_string(),
@@ -2073,26 +2114,23 @@ impl AllocationToolService {
             }
         }
 
-        let target =
-            tantra_ledger_allocation::optimize(objective, &constraints, &state).map_err(|e| {
-                match e {
-                    AllocationError::InvalidArgument(msg) => McpError::InvalidArguments(msg),
-                    AllocationError::InfeasibleConstraints(msg) => {
-                        McpError::InvalidArguments(format!("infeasible constraints: {msg}"))
-                    }
-                    AllocationError::NotImplemented(msg) => {
-                        McpError::Internal(format!("objective not implemented: {msg}"))
-                    }
-                    AllocationError::SingularCovariance => McpError::Internal(
-                        "covariance matrix is singular or not positive-definite".to_string(),
-                    ),
-                    AllocationError::InsufficientHistory { needed, got } => {
-                        McpError::InvalidArguments(format!(
-                            "insufficient history: needed {needed}, got {got}"
-                        ))
-                    }
+        let target = tantra_ledger_allocation::optimize(objective, &constraints, &state).map_err(
+            |e| match e {
+                AllocationError::InvalidArgument(msg) => McpError::InvalidArguments(msg),
+                AllocationError::InfeasibleConstraints(msg) => {
+                    McpError::InvalidArguments(format!("infeasible constraints: {msg}"))
                 }
-            })?;
+                AllocationError::NotImplemented(msg) => {
+                    McpError::Internal(format!("objective not implemented: {msg}"))
+                }
+                AllocationError::SingularCovariance => McpError::Internal(
+                    "covariance matrix is singular or not positive-definite".to_string(),
+                ),
+                AllocationError::InsufficientHistory { needed, got } => McpError::InvalidArguments(
+                    format!("insufficient history: needed {needed}, got {got}"),
+                ),
+            },
+        )?;
 
         let mut weights_vec = Vec::with_capacity(n);
         let mut weights_map = BTreeMap::new();

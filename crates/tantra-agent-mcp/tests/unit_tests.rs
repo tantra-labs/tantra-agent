@@ -1471,7 +1471,10 @@ async fn test_tool_price_derivatives_validation_errors() {
             }
         }),
     };
-    let resp = server.handle_message(&msg_neg_spot).await.expect("response");
+    let resp = server
+        .handle_message(&msg_neg_spot)
+        .await
+        .expect("response");
     if let RpcMessage::Response { error, .. } = resp {
         assert!(error.is_some(), "expected error for negative spot");
     }
@@ -1492,7 +1495,10 @@ async fn test_tool_price_derivatives_validation_errors() {
             }
         }),
     };
-    let resp2 = server.handle_message(&msg_bad_type).await.expect("response");
+    let resp2 = server
+        .handle_message(&msg_bad_type)
+        .await
+        .expect("response");
     if let RpcMessage::Response { error, .. } = resp2 {
         assert!(error.is_some(), "expected error for invalid option_type");
     }
@@ -1640,11 +1646,7 @@ async fn test_gateway_search_tools_volatility_category() {
         let data = &res["structuredContent"]["data"];
         assert_eq!(data["category"], "volatility");
         let tools = data["tools"].as_array().expect("tools array");
-        assert!(
-            tools
-                .iter()
-                .any(|t| t["name"] == "tantra_garch_volatility")
-        );
+        assert!(tools.iter().any(|t| t["name"] == "tantra_garch_volatility"));
     } else {
         panic!("unexpected response type");
     }

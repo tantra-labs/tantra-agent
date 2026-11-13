@@ -5,7 +5,6 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use tokio::sync::mpsc;
 use tantra_agent_chat::event::{CallId, TurnId};
 use tantra_agent_chat::permission::ToolRisk;
 use tantra_agent_chat::tool::{ChatTool, ToolContext, ToolRegistry};
@@ -33,6 +32,7 @@ use tantra_core::{
 };
 use tantra_ledger::repository::OrderRecord;
 use tantra_ledger::{PositionRecord, TaxLot};
+use tokio::sync::mpsc;
 
 // ——————————————————————————————————————————————————————————————————————————
 // Mocks for Testing Ports

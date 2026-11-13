@@ -9,7 +9,6 @@ Per workspace rule `.agents/rules/gap-tracking.md`:
 
 | # | Title | Severity | Status | Plan |
 |---|-------|----------|--------|------|
-| [0001](0001-inline-tests-in-ref-store.md) | Inline `#[cfg(test)]` blocks in `tantra-agent-core/src/ref_store.rs` **and** `tantra-agent-research/src/verify/mod.rs` | High | Open | [0008](../plans/0008-tdd-cleanup-inline-tests.md) |
 | [0003](0003-persistent-memory-not-implemented.md) | `UserMemory` persistent memory with profile budgeters not implemented | Medium | Open | [0009](../plans/0009-persistent-memory-mcp-client-and-phase-e.md) |
 | [0004](0004-mcp-stdio-client-bridge.md) | MCP stdio client bridge not implemented in `tantra-agent-mcp` | Medium | Open | [0009](../plans/0009-persistent-memory-mcp-client-and-phase-e.md), [0007 Phase 17](../plans/0007-comprehensive-mcp-ecosystem-and-agent-implementation-guide.md) |
 | [0005](0005-research-note-not-implemented.md) | `ResearchNote` in `tantra-agent-report` not implemented | Low | Open | [0009](../plans/0009-persistent-memory-mcp-client-and-phase-e.md) |
@@ -20,4 +19,5 @@ Per workspace rule `.agents/rules/gap-tracking.md`:
 
 | # | Title | Closed In |
 |---|-------|-----------|
+| 0001 | Inline `#[cfg(test)]` blocks in `tantra-agent-core/src/ref_store.rs` + `tantra-agent-research/src/verify/mod.rs` | Moved to `tests/ref_store_tests.rs` (new) + `tests/verify_tests.rs` (existing coverage) 2026-11-13 (plan 0008); 4 + 10 tests green |
 | 0002 | `tantra-agent-chat-tools` crate (read-only tools + `PureToolAdapter`) | Implemented (Phase B) in commit `f3f1cdc` (read-only tools & ports) + `85d3c07` (strategy advisory tools), expanded by plan 0006 Phases 1–4 (`a72689c`, `98c66c2`, `127597d`). See `docs/design/code-chat-tools.md`. |

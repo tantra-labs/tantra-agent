@@ -151,10 +151,8 @@ fn test_cryptographic_hash_chaining_and_tamper_detection() {
 
 #[test]
 fn test_jsonl_prompt_cache_roundtrip() {
-    let tmp_path = std::env::temp_dir().join(format!(
-        "tantra_jsonl_cache_{}.jsonl",
-        uuid::Uuid::new_v4()
-    ));
+    let tmp_path =
+        std::env::temp_dir().join(format!("tantra_jsonl_cache_{}.jsonl", uuid::Uuid::new_v4()));
     let now = Utc::now();
 
     let d = sample_decision_buy("INFY", 50, 1600);

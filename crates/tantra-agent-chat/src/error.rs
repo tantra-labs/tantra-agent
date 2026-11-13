@@ -1,9 +1,9 @@
 //! Error types for tantra-agent-chat.
 
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 use tantra_agent_core::{MessageSeq, StoreError, ToolError};
 use tantra_agent_llm::LlmError;
+use thiserror::Error;
 
 /// Core error type for conversation assistant operations.
 #[derive(Debug, Error)]

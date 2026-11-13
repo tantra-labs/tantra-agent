@@ -80,10 +80,7 @@ pub fn fit_garch11(returns: &[f64], config: &GarchConfig) -> Result<GarchResult>
     }
     let n = returns.len();
     if n < 10 {
-        return Err(AnalyticsError::InsufficientData {
-            needed: 10,
-            got: n,
-        });
+        return Err(AnalyticsError::InsufficientData { needed: 10, got: n });
     }
     if config.p != 1 || config.q != 1 {
         return Err(AnalyticsError::TradeMismatch(format!(
@@ -158,16 +155,17 @@ pub fn fit_garch11(returns: &[f64], config: &GarchConfig) -> Result<GarchResult>
 
     // Nelder-Mead simplex optimization in 2D
     let p0 = best_seed;
-    let p1 = (
-        (best_seed.0 + 0.03).min(0.4),
-        (best_seed.1 - 0.03).max(0.1),
-    );
+    let p1 = ((best_seed.0 + 0.03).min(0.4), (best_seed.1 - 0.03).max(0.1));
     let p2 = (
         (best_seed.0 - 0.02).max(0.01),
         (best_seed.1 + 0.01).min(0.95),
     );
 
-    let mut simplex = [(p0, nll(p0.0, p0.1)), (p1, nll(p1.0, p1.1)), (p2, nll(p2.0, p2.1))];
+    let mut simplex = [
+        (p0, nll(p0.0, p0.1)),
+        (p1, nll(p1.0, p1.1)),
+        (p2, nll(p2.0, p2.1)),
+    ];
 
     for _ in 0..200 {
         // Sort vertices so simplex[0] is best, simplex[2] is worst
@@ -184,7 +182,10 @@ pub fn fit_garch11(returns: &[f64], config: &GarchConfig) -> Result<GarchResult>
         }
 
         // Centroid of best two points
-        let xo = (0.5 * (best.0 + second_worst.0), 0.5 * (best.1 + second_worst.1));
+        let xo = (
+            0.5 * (best.0 + second_worst.0),
+            0.5 * (best.1 + second_worst.1),
+        );
 
         // Reflection
         let xr = (2.0 * xo.0 - worst.0, 2.0 * xo.1 - worst.1);
@@ -227,8 +228,14 @@ pub fn fit_garch11(returns: &[f64], config: &GarchConfig) -> Result<GarchResult>
         }
 
         // Shrink
-        let x1 = (0.5 * (simplex[1].0.0 + best.0), 0.5 * (simplex[1].0.1 + best.1));
-        let x2 = (0.5 * (simplex[2].0.0 + best.0), 0.5 * (simplex[2].0.1 + best.1));
+        let x1 = (
+            0.5 * (simplex[1].0.0 + best.0),
+            0.5 * (simplex[1].0.1 + best.1),
+        );
+        let x2 = (
+            0.5 * (simplex[2].0.0 + best.0),
+            0.5 * (simplex[2].0.1 + best.1),
+        );
         simplex[1] = (x1, nll(x1.0, x1.1));
         simplex[2] = (x2, nll(x2.0, x2.1));
     }
@@ -258,8 +265,12 @@ pub fn fit_garch11(returns: &[f64], config: &GarchConfig) -> Result<GarchResult>
         sigma_sq = omega + opt_alpha * e_sq + opt_beta * sigma_sq;
     }
 
-    let latest_conditional_volatility = *conditional_volatilities.last().unwrap_or(&unconditional_volatility);
-    let latest_annualized_volatility = (latest_conditional_volatility * latest_conditional_volatility * config.annualization).sqrt();
+    let latest_conditional_volatility = *conditional_volatilities
+        .last()
+        .unwrap_or(&unconditional_volatility);
+    let latest_annualized_volatility =
+        (latest_conditional_volatility * latest_conditional_volatility * config.annualization)
+            .sqrt();
 
     // Out-of-sample forward forecasts: sigma_{T+h}^2 = V_L + (alpha+beta)^h * (sigma_T^2 - V_L)
     let latest_sigma_sq = sigma_sq; // next step 1-step forecast variance
@@ -314,10 +325,7 @@ mod tests {
         let res = fit_garch11(&[0.01, -0.01, 0.02], &GarchConfig::default());
         assert_eq!(
             res,
-            Err(AnalyticsError::InsufficientData {
-                needed: 10,
-                got: 3
-            })
+            Err(AnalyticsError::InsufficientData { needed: 10, got: 3 })
         );
     }
 

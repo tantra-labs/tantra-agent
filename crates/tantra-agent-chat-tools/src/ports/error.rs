@@ -1,8 +1,8 @@
 //! Error types for domain read ports.
 
 use serde::{Deserialize, Serialize};
-use thiserror::Error;
 use tantra_agent_core::ToolError;
+use thiserror::Error;
 
 /// Classification of domain port failures.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Error)]
