@@ -304,6 +304,10 @@ pub fn list_tool_definitions() -> Vec<serde_json::Value> {
                         "type": "integer",
                         "minimum": 1,
                         "description": "Simulation horizon in bars (defaults to length of input series)"
+                    },
+                    "_jq": {
+                        "type": "string",
+                        "description": "JSONPath filter applied to the response payload before serialization"
                     }
                 },
                 "required": ["returns"]
@@ -325,6 +329,10 @@ pub fn list_tool_definitions() -> Vec<serde_json::Value> {
                         "type": "array",
                         "items": { "type": "number" },
                         "description": "Dependent price/return series Y"
+                    },
+                    "_jq": {
+                        "type": "string",
+                        "description": "JSONPath filter applied to the response payload before serialization"
                     }
                 },
                 "required": ["series_x", "series_y"]
@@ -351,6 +359,10 @@ pub fn list_tool_definitions() -> Vec<serde_json::Value> {
                         "type": "integer",
                         "minimum": 1,
                         "description": "Number of bars in testing/out-of-sample window"
+                    },
+                    "_jq": {
+                        "type": "string",
+                        "description": "JSONPath filter applied to the response payload before serialization"
                     }
                 },
                 "required": ["returns"]
@@ -380,6 +392,10 @@ pub fn list_tool_definitions() -> Vec<serde_json::Value> {
                         "type": "number",
                         "default": 252.0,
                         "description": "Annualization factor (e.g. 252 for daily trading sessions)"
+                    },
+                    "_jq": {
+                        "type": "string",
+                        "description": "JSONPath filter applied to the response payload before serialization"
                     }
                 },
                 "required": ["factor_returns"]
@@ -436,6 +452,10 @@ pub fn list_tool_definitions() -> Vec<serde_json::Value> {
                             }
                         },
                         "description": "Optional per-asset min/max weight bounds [min, max]"
+                    },
+                    "_jq": {
+                        "type": "string",
+                        "description": "JSONPath filter applied to the response payload before serialization"
                     }
                 },
                 "required": ["covariance_matrix"]
@@ -477,6 +497,10 @@ pub fn list_tool_definitions() -> Vec<serde_json::Value> {
                         "type": "number",
                         "default": 0.0,
                         "description": "Annualized continuously compounded dividend yield (default 0.0)"
+                    },
+                    "_jq": {
+                        "type": "string",
+                        "description": "JSONPath filter applied to the response payload before serialization"
                     }
                 },
                 "required": ["spot", "strike", "t_years", "risk_free_rate", "volatility", "option_type"]
@@ -513,6 +537,10 @@ pub fn list_tool_definitions() -> Vec<serde_json::Value> {
                         "type": "number",
                         "default": 252.0,
                         "description": "Annualization factor (e.g. 252.0 for daily trading sessions)"
+                    },
+                    "_jq": {
+                        "type": "string",
+                        "description": "JSONPath filter applied to the response payload before serialization"
                     }
                 },
                 "required": ["returns"]

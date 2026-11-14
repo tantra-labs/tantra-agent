@@ -18,6 +18,9 @@ tracing.workspace = true
 schemars.workspace = true
 tantra-core = { workspace = true }
 tantra-risk = { workspace = true }
+tantra-agent-core = { workspace = true }
+tantra-agent-prompt = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
+async-trait.workspace = true

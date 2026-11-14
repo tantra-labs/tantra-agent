@@ -14,6 +14,11 @@ pub mod narrate;
 #[cfg(feature = "llm")]
 pub use narrate::{NARRATE_SYSTEM_PROMPT, ReportLlmError, narrate_report};
 
+/// Structured research notes with Typst / Markdown rendering.
+pub mod notes;
+
+pub use notes::{NoteVerdict, ResearchNote};
+
 /// A named metric shown in the report header.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Metric {

@@ -7,12 +7,14 @@
 //! backtest execution, metric evaluation, strategy optimization, and decision explanation (Task 3.2).
 //! Generates configuration manifests for Claude Desktop, Cursor, and Gemini CLI (Task 3.3).
 
+pub mod client;
 pub mod error;
 pub mod frontier;
 pub mod server;
 pub mod tools;
 pub mod transport;
 
+pub use client::{McpClient, McpClientError};
 pub use error::McpError;
 pub use frontier::{
     AgentManifestPaths, ClaudeDesktopConfig, CursorMcpConfig, GeminiMcpConfig, ManifestGenerator,

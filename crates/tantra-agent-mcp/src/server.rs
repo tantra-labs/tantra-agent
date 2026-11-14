@@ -10,7 +10,10 @@ use crate::tools::{
     MetricsCalculatorService, SpecValidatorService, StrategyOptimizerService,
     VolatilityToolService, list_tool_definitions,
 };
-use tantra_agent_core::{DataReferenceStore, DisplayBlock, MetricItem, TantraResultEnvelope};
+use tantra_agent_core::{
+    DataReferenceStore, DisplayBlock, MetricItem, TantraResultEnvelope,
+    jq::apply_jq_filter as apply_jq,
+};
 
 /// JSON-RPC 2.0 message envelope.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -184,9 +187,32 @@ impl McpServer {
             "tools/call" => {
                 let name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
                 let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
+                // Universal `_jq` response filter (plan 0007 Track 6 Phase 15):
+                // an optional JSONPath applied to the result envelope's `data`
+                // payload before serialization, slashing token usage on large
+                // envelopes.
+                let jq_filter: Option<String> = arguments
+                    .get("_jq")
+                    .and_then(|v| v.as_str())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_string);
 
                 match self.call_tool(name, arguments).await {
                     Ok(tool_result) => {
+                        let tool_result = match jq_filter {
+                            Some(filter) => match apply_jq_to_envelope(tool_result, &filter) {
+                                Ok(filtered) => filtered,
+                                Err(err) => {
+                                    return RpcMessage::Response {
+                                        id,
+                                        result: None,
+                                        error: Some(RpcError::invalid_params(err.to_string())),
+                                    };
+                                }
+                            },
+                            None => tool_result,
+                        };
                         let result = json!({
                             "content": [
                                 {
@@ -506,4 +532,20 @@ impl McpServer {
 
         serde_json::to_value(envelope).map_err(McpError::Json)
     }
+}
+
+/// Apply a `_jq` JSONPath filter to a result envelope (plan 0007 Track 6
+/// Phase 15): the filter runs against the full envelope (so `$.data.<field>`
+/// extracts a field from the typed payload), and the first matched node is
+/// written back into the `"data"` field. Invalid expressions and empty
+/// matches surface as informative [`McpError::InvalidArguments`] JSON-RPC
+/// errors instead of panics.
+fn apply_jq_to_envelope(
+    mut envelope: serde_json::Value,
+    filter: &str,
+) -> Result<serde_json::Value, McpError> {
+    let filtered =
+        apply_jq(&envelope, filter).map_err(|e| McpError::InvalidArguments(format!("_jq: {e}")))?;
+    envelope["data"] = filtered;
+    Ok(envelope)
 }

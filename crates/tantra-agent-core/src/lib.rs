@@ -21,6 +21,7 @@ pub mod decision;
 pub mod error;
 pub mod indicators;
 pub mod jobs;
+pub mod jq;
 pub mod memory;
 pub mod ports;
 pub mod prompt;
@@ -36,6 +37,7 @@ pub use indicators::{
     IndicatorCatalog, IndicatorCategory, IndicatorInvocation, IndicatorSpec, ParameterSpec,
     StrategySpec, validate_spec_indicators,
 };
+pub use jq::{JqError, apply_jq_filter};
 pub use memory::{MemoryCategory, MemoryEngine, MemoryFact};
 pub use ports::{
     MemoryEntry, MemoryId, MemoryKind, MemoryOrigin, MemoryProfile, MemoryQuery, MemoryStore,

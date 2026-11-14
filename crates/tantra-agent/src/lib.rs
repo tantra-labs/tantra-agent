@@ -9,14 +9,17 @@
 //! - Deterministic prompt & output logging with SHA256 checksums, seed tracking, and model version tags.
 //! - Deterministic [`PromptReplayer`] enabling recorded LLM decision trails to be replayed through
 //!   the event-driven backtester with research-live parity.
+//! - Persistent per-profile [`UserMemory`] with recall budgeters and cache-stable prompt sections.
 
 pub mod audit;
 pub mod error;
+pub mod memory;
 pub mod parser;
 pub mod replayer;
 
 pub use audit::{LlmRecord, LlmTrailLogger, sha256_hex};
 pub use error::{DecisionError, ReplayError};
+pub use memory::UserMemory;
 pub use parser::DecisionParser;
 pub use replayer::PromptReplayer;
 pub use tantra_core::Decision;

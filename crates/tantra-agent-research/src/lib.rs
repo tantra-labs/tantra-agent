@@ -25,6 +25,7 @@ pub mod backtest;
 pub mod enhancer;
 pub mod hypothesis;
 pub mod manifest;
+pub mod notes;
 pub mod verification;
 pub mod verify;
 
@@ -47,6 +48,7 @@ pub use enhancer::{
 };
 pub use hypothesis::{Hypothesis, HypothesisGenerator, MarketRegime};
 pub use manifest::DatasetManifest;
+pub use notes::research_note_from_verification;
 pub use verification::{
     StatisticalVerificationReport, StatisticalVerifier, VerificationThresholds,
 };

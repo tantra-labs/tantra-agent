@@ -13,6 +13,7 @@ llm = ["dep:tantra-agent-llm"]
 tantra-core.workspace = true
 tantra-agent-core = { path = "../tantra-agent-core" }
 tantra-agent-analytics = { path = "../tantra-agent-analytics" }
+tantra-agent-report = { path = "../tantra-agent-report" }
 tantra-agent-llm = { path = "../tantra-agent-llm", optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
