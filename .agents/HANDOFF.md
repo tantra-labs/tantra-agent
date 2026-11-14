@@ -4,6 +4,18 @@
 
 ## Phase / Slice Status
 
+- **T6.8 (plan 0007 Track 3 — tool surface, 2026-11-14)**: fundamentals / mutual funds /
+  IPO chat-tool surface shipped:
+  - 3 new ports + 6 new ReadOnly tools (catalogue **24 → 30**): `FundamentalReader`
+    (`fundamental_ratios`/`financial_statements`), `FundReader` (`fund_search`/
+    `fund_holdings`), `IpoReader` (`ipo_calendar`/`ipo_subscription`) — exact `Decimal`,
+    honest `PortError::unavailable` stubs citing new `tantra-data` gaps 0020 (fundamentals),
+    0021 (mutual funds), 0022 (IPO).
+  - Runtime: `FeedFundamentalReader`/`FeedFundReader`/`FeedIpoReader` adapters in
+    `tantra-runtime-api-rest` (`chat_fundamental.rs`/`chat_fund.rs`/`chat_ipo.rs`), wired in
+    `ChatRuntime::from_env`.
+  - `register_read_only_tools` gained the 3 reader params (`#[allow(clippy::too_many_arguments)]`);
+    runtime gap 0007 doc appends items 14–16. Data ingestion tracked by the three gaps.
 - **T6.12 (plan 0010 — Implemented, 2026-11-14)**: Institutional / smart-money detection
   suite Phases 1–5 landed:
   - `delivery_analysis` + `oi_buildup` chat tools (catalogue **22 → 24** read-only):
@@ -62,15 +74,15 @@
     SSE transport noted shipped).
 - **Plan 0006 (MCP/chat tool catalog expansion) — complete**: Phases 1–4 implemented
   (2026-11-11/12) and recorded in `docs/plans/README.md` Implemented table. Full detail in the
-  README + git history; catalogue is 24 read-only + 2 alert + 3 strategy tools.
+  README + git history; catalogue is 30 read-only + 2 alert + 3 strategy tools.
 - **Plans 0001–0005**: complete and merged — see `docs/plans/README.md` Implemented table.
 
 ## Immediate Next Step
 
-- **Plan 0007 remaining tracks (open)**: Track 3 (T6.8 fundamentals / mutual funds / IPO —
-  needs new `tantra-data` ingestion first: file data gaps before tool code per plan 0007 §3),
+- **Plan 0007 remaining tracks (open)**: Track 3 data ingestion is tracked by `tantra-data`
+  gaps 0020–0022 (fundamentals / mutual funds / IPO) — the chat-tool surface is shipped;
   Track 5 (T6.10 safe trade-intent bridge via NoFX approval queue + paper sandbox, strategy
-  CRUD, tax — the largest remaining slice).
+  CRUD, tax — the largest remaining slice) is the only open T6 task.
 - **Plan 0010 (T6.12, Implemented)**: tool surface + composite strategy shipped; close the
   upstream bridges to turn the stubs real — `tantra-data` 0017 (institutional-flow bridge) +
   0019 (delivery bridge), `tantra-market` 0006 (L2 depth), and wire
@@ -79,7 +91,7 @@
 - **R4 architectural-dependency test** (pre-existing): decide whether to drop the
   `tantra-agent-mcp` → `tantra-ledger-allocation` dep or widen R4 to allow mcp.
 - **Filing discipline**: new chat-tool categories need provider-repo gap docs (`tantra-data`
-  next 0020+; `tantra-market` next 0007+) before tool code.
+  next 0023+; `tantra-market` next 0007+) before tool code.
 
 New **plan 0012** (approved design, 2026-11-13): agent-roster culmination — Prism Insight (13,
 github.com/dragon1086/prism-insight) + Fincept (37, github.com/Fincept-Corporation/FinceptTerminal)
@@ -95,7 +107,7 @@ flow tracked by `tantra-ui/docs/plans/0007`.
 - Plan numbering collision fixed: active plans 0008/0009 replace the reused `0002`/`0003`
   numbers (implemented plans 0001–0006 keep theirs). Gap 0002 closed in the index; gap
   numbers are never reused per `.agents/rules/gap-tracking.md`.
-- Chat catalogue: **24 read-only tools** (`test_total_read_only_catalogue_count` pins the count)
+- Chat catalogue: **30 read-only tools** (`test_total_read_only_catalogue_count` pins the count)
   **plus** the 2-tool alert bundle and 3 strategy tools. Content (Phase 3) and
   options-chain/corporate-actions (Phase 4) tools all went into the main all-ReadOnly bundle
   (unlike the LocalWrite alert CRUD, which sits outside so its count-pin invariant stays

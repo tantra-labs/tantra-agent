@@ -19,6 +19,11 @@ use tantra_agent_chat_tools::ports::calendar::{
 };
 use tantra_agent_chat_tools::ports::content::{ContentReader, FilingRecord, NewsArticle};
 use tantra_agent_chat_tools::ports::error::PortError;
+use tantra_agent_chat_tools::ports::fund::{FundHolding, FundReader, MutualFundMeta};
+use tantra_agent_chat_tools::ports::fundamental::{
+    FinancialStatement, FundamentalRatios, FundamentalReader,
+};
+use tantra_agent_chat_tools::ports::ipo::{IpoIssue, IpoReader, IpoSubscription};
 use tantra_agent_chat_tools::ports::market::{
     BlockDeal, CorporateAction, DeliveryBar, InstitutionalFlow, InstrumentSearchResult,
     MacroSeries, MarketBar, MarketDepth, MarketDepthLevel, MarketHistory, MarketIndicators,
@@ -482,6 +487,181 @@ impl CalendarReader for MockCalendarReader {
     }
 }
 
+struct MockFundamentalReader {
+    fail: bool,
+}
+
+#[async_trait]
+impl FundamentalReader for MockFundamentalReader {
+    async fn fundamental_ratios(
+        &self,
+        instrument: &InstrumentId,
+    ) -> Result<FundamentalRatios, PortError> {
+        if self.fail {
+            return Err(PortError::unavailable(
+                "fundamentals data not ingested yet — see tantra-data/docs/gaps/0020-fundamentals-ingestion.md",
+            ));
+        }
+        Ok(FundamentalRatios {
+            instrument: instrument.clone(),
+            as_of: Utc::now(),
+            pe_ratio: Some(dec!(18.5)),
+            pb_ratio: Some(dec!(3.2)),
+            ev_ebitda: Some(dec!(12.4)),
+            dividend_yield_pct: Some(dec!(0.8)),
+            roce_pct: Some(dec!(15.2)),
+            roe_pct: Some(dec!(12.0)),
+            debt_equity: Some(dec!(0.4)),
+            interest_coverage: Some(dec!(9.1)),
+        })
+    }
+
+    async fn financial_statements(
+        &self,
+        instrument: &InstrumentId,
+        statement_type: Option<&str>,
+        limit: Option<usize>,
+    ) -> Result<Vec<FinancialStatement>, PortError> {
+        if self.fail {
+            return Err(PortError::unavailable(
+                "fundamentals data not ingested yet — see tantra-data/docs/gaps/0020-fundamentals-ingestion.md",
+            ));
+        }
+        let statements = vec![
+            FinancialStatement {
+                instrument: instrument.clone(),
+                statement_type: "income_statement".to_string(),
+                fiscal_quarter: "FY2026-Q2".to_string(),
+                revenue: Some(Money::inr(dec!(2500000000.0))),
+                operating_profit: Some(Money::inr(dec!(450000000.0))),
+                net_income: Some(Money::inr(dec!(300000000.0))),
+                eps: Some(dec!(18.9)),
+            },
+            FinancialStatement {
+                instrument: instrument.clone(),
+                statement_type: "balance_sheet".to_string(),
+                fiscal_quarter: "FY2026-Q2".to_string(),
+                revenue: None,
+                operating_profit: None,
+                net_income: None,
+                eps: None,
+            },
+        ];
+        let mut hits: Vec<FinancialStatement> = statements
+            .into_iter()
+            .filter(|s| statement_type.is_none_or(|t| s.statement_type == t))
+            .collect();
+        if let Some(l) = limit {
+            hits.truncate(l);
+        }
+        Ok(hits)
+    }
+}
+
+struct MockFundReader {
+    fail: bool,
+}
+
+#[async_trait]
+impl FundReader for MockFundReader {
+    async fn fund_search(
+        &self,
+        query: &str,
+        limit: Option<usize>,
+    ) -> Result<Vec<MutualFundMeta>, PortError> {
+        if self.fail {
+            return Err(PortError::unavailable(
+                "mutual-fund data not ingested yet — see tantra-data/docs/gaps/0021-mutual-fund-data-ingestion.md",
+            ));
+        }
+        let funds = vec![MutualFundMeta {
+            scheme_code: "122639".to_string(),
+            scheme_name: "Parag Parikh Flexi Cap Fund".to_string(),
+            category: "Flexi Cap".to_string(),
+            nav: Some(Money::inr(dec!(78.5))),
+            cagr_1y_pct: Some(dec!(24.1)),
+            cagr_3y_pct: Some(dec!(18.2)),
+            cagr_5y_pct: Some(dec!(16.8)),
+            expense_ratio_pct: Some(dec!(0.61)),
+        }];
+        let hits: Vec<MutualFundMeta> = funds
+            .into_iter()
+            .filter(|f| {
+                f.scheme_name.to_lowercase().contains(&query.to_lowercase())
+                    || f.scheme_code.contains(query)
+            })
+            .collect();
+        let take = limit.unwrap_or(hits.len());
+        Ok(hits.into_iter().take(take).collect())
+    }
+
+    async fn fund_holdings(&self, scheme_code: &str) -> Result<Vec<FundHolding>, PortError> {
+        if self.fail {
+            return Err(PortError::unavailable(
+                "mutual-fund data not ingested yet — see tantra-data/docs/gaps/0021-mutual-fund-data-ingestion.md",
+            ));
+        }
+        if scheme_code != "122639" {
+            return Ok(vec![]);
+        }
+        Ok(vec![
+            FundHolding {
+                asset_name: "RELIANCE".to_string(),
+                weight_pct: dec!(8.4),
+                sector: Some("Energy".to_string()),
+            },
+            FundHolding {
+                asset_name: "TCS".to_string(),
+                weight_pct: dec!(6.9),
+                sector: Some("IT".to_string()),
+            },
+        ])
+    }
+}
+
+struct MockIpoReader {
+    fail: bool,
+}
+
+#[async_trait]
+impl IpoReader for MockIpoReader {
+    async fn upcoming_ipos(&self, limit: Option<usize>) -> Result<Vec<IpoIssue>, PortError> {
+        if self.fail {
+            return Err(PortError::unavailable(
+                "IPO data not ingested yet — see tantra-data/docs/gaps/0022-ipo-calendar-and-subscription-ingestion.md",
+            ));
+        }
+        let issues = vec![IpoIssue {
+            symbol: "ZAGGLECOM".to_string(),
+            company_name: "Zaggle Prepaid Ocean Services".to_string(),
+            open_date: Utc::now() + chrono::Duration::days(2),
+            close_date: Utc::now() + chrono::Duration::days(4),
+            price_min: Some(Price(dec!(140.0))),
+            price_max: Some(Price(dec!(148.0))),
+            lot_size: Some(100),
+            issue_size: Some(Money::inr(dec!(8000000000.0))),
+        }];
+        let take = limit.unwrap_or(issues.len());
+        Ok(issues.into_iter().take(take).collect())
+    }
+
+    async fn ipo_subscription(&self, symbol: &str) -> Result<IpoSubscription, PortError> {
+        if self.fail {
+            return Err(PortError::unavailable(
+                "IPO data not ingested yet — see tantra-data/docs/gaps/0022-ipo-calendar-and-subscription-ingestion.md",
+            ));
+        }
+        Ok(IpoSubscription {
+            symbol: symbol.to_string(),
+            as_of: Utc::now(),
+            qib_multiple: Some(dec!(2.5)),
+            nii_multiple: Some(dec!(1.8)),
+            rii_multiple: Some(dec!(3.2)),
+            total_multiple: Some(dec!(2.6)),
+        })
+    }
+}
+
 struct MockPortfolioReader;
 
 #[async_trait]
@@ -799,6 +979,9 @@ async fn test_market_tools() {
             fail_content: false,
         }),
         Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
         Some(snapshot),
     );
 
@@ -882,6 +1065,9 @@ async fn test_block_deals_tools() {
             fail_content: false,
         }),
         Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
         None,
     );
 
@@ -926,6 +1112,9 @@ async fn test_block_deals_tools() {
             fail_content: false,
         }),
         Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
         None,
     );
     let err = fail_registry
@@ -952,6 +1141,9 @@ async fn test_content_tools() {
         Arc::new(MockMarketReader { fail_quotes: false }),
         content,
         Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
         None,
     );
 
@@ -1055,6 +1247,9 @@ async fn test_content_tools() {
         Arc::new(MockMarketReader { fail_quotes: false }),
         failing,
         Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
         None,
     );
     for name in ["news_search", "filings_search"] {
@@ -1095,6 +1290,9 @@ async fn test_options_and_corporate_actions_tools() {
             fail_content: false,
         }),
         Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
         None,
     );
 
@@ -1214,6 +1412,9 @@ async fn test_options_and_corporate_actions_tools() {
             fail_content: false,
         }),
         Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
         None,
     );
     for (name, input) in [
@@ -1426,6 +1627,9 @@ async fn test_portfolio_tools() {
         market,
         content,
         Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
         None,
     );
 
@@ -1527,6 +1731,9 @@ async fn test_portfolio_graceful_degradation_without_quotes() {
         market,
         content,
         Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
         None,
     );
 
@@ -1562,6 +1769,9 @@ async fn test_lifted_pure_tools() {
             fail_content: false,
         }),
         Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
         Some(snapshot),
     );
 
@@ -1620,10 +1830,13 @@ async fn test_total_read_only_catalogue_count() {
         market,
         content,
         Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
         None,
     );
     let specs = registry.specs();
-    assert_eq!(specs.len(), 24);
+    assert_eq!(specs.len(), 30);
 
     for spec in &specs {
         let tool = registry.get(&spec.name).unwrap();
@@ -1740,6 +1953,9 @@ async fn market_depth_tool_returns_ladder() {
             fail_content: false,
         }),
         Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
         None,
     );
 
@@ -1783,6 +1999,9 @@ async fn market_depth_tool_returns_ladder() {
             fail_content: false,
         }),
         Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
         None,
     );
     let err = fail_registry
@@ -1812,6 +2031,9 @@ async fn institutional_flows_tool_returns_flows() {
             fail_content: false,
         }),
         Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
         None,
     );
 
@@ -1847,6 +2069,9 @@ async fn economic_calendar_tool_filters_and_limits() {
             fail_content: false,
         }),
         Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
         None,
     );
 
@@ -1911,6 +2136,9 @@ async fn delivery_analysis_tool_returns_delivery_bars() {
             fail_content: false,
         }),
         Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
         None,
     );
 
@@ -1959,6 +2187,9 @@ async fn delivery_analysis_tool_returns_delivery_bars() {
             fail_content: false,
         }),
         Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
         None,
     );
     let err = fail_registry
@@ -2001,6 +2232,9 @@ async fn oi_buildup_tool_returns_classification() {
             fail_content: false,
         }),
         Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
         None,
     );
 
@@ -2035,6 +2269,9 @@ async fn oi_buildup_tool_returns_classification() {
             fail_content: false,
         }),
         Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
         None,
     );
     let err = fail_registry
@@ -2062,5 +2299,271 @@ async fn oi_buildup_tool_returns_classification() {
     assert!(
         matches!(err, ToolError::InvalidArguments { .. }),
         "unknown field must be rejected, got {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn fundamentals_and_statements_tools() {
+    let mut registry = ToolRegistry::new();
+    register_read_only_tools(
+        &mut registry,
+        Arc::new(MockPortfolioReader),
+        Arc::new(MockMarketReader { fail_quotes: false }),
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
+        None,
+    );
+
+    // 1. fundamental_ratios — success.
+    let tool = registry
+        .get("fundamental_ratios")
+        .expect("fundamental_ratios registered");
+    assert_eq!(tool.traits().risk, ToolRisk::ReadOnly);
+    let out = tool
+        .execute(
+            serde_json::json!({ "instrument": "NSE:RELIANCE" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["instrument"], "NSE:RELIANCE");
+    assert_eq!(parse_dec(&out.payload["pe_ratio"]), 18.5);
+    assert_eq!(parse_dec(&out.payload["roe_pct"]), 12.0);
+    assert!(out.payload["as_of"].is_string());
+
+    // 2. financial_statements — success + type filter + limit cap.
+    let tool = registry
+        .get("financial_statements")
+        .expect("financial_statements registered");
+    let out = tool
+        .execute(
+            serde_json::json!({ "instrument": "NSE:RELIANCE" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["count"], 2);
+    assert_eq!(
+        out.payload["statements"][0]["statement_type"],
+        "income_statement"
+    );
+    assert_eq!(out.payload["statements"][0]["fiscal_quarter"], "FY2026-Q2");
+    assert_eq!(parse_dec(&out.payload["statements"][0]["eps"]), 18.9);
+    let out = tool
+        .execute(
+            serde_json::json!({
+                "instrument": "NSE:RELIANCE",
+                "statement_type": "balance_sheet"
+            }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.payload["count"], 1);
+    let out = tool
+        .execute(
+            serde_json::json!({ "instrument": "NSE:RELIANCE", "limit": 1 }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(out.payload["count"], 1);
+
+    // 3. Honest unavailability when no fundamentals source exists.
+    let mut fail_registry = ToolRegistry::new();
+    register_read_only_tools(
+        &mut fail_registry,
+        Arc::new(MockPortfolioReader),
+        Arc::new(MockMarketReader { fail_quotes: false }),
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: true }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
+        None,
+    );
+    for name in ["fundamental_ratios", "financial_statements"] {
+        let err = fail_registry
+            .get(name)
+            .unwrap()
+            .execute(
+                serde_json::json!({ "instrument": "NSE:RELIANCE" }),
+                dummy_tool_context(),
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, ToolError::Execution(..)),
+            "unavailable fundamentals port must surface as ToolError::Execution, got {err:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn fund_search_and_holdings_tools() {
+    let mut registry = ToolRegistry::new();
+    register_read_only_tools(
+        &mut registry,
+        Arc::new(MockPortfolioReader),
+        Arc::new(MockMarketReader { fail_quotes: false }),
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
+        None,
+    );
+
+    // 1. fund_search — success.
+    let tool = registry.get("fund_search").expect("fund_search registered");
+    assert_eq!(tool.traits().risk, ToolRisk::ReadOnly);
+    let out = tool
+        .execute(
+            serde_json::json!({ "query": "parag" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["count"], 1);
+    let fund = &out.payload["funds"][0];
+    assert_eq!(fund["scheme_code"], "122639");
+    assert_eq!(fund["category"], "Flexi Cap");
+    assert_eq!(parse_dec(&fund["nav"]), 78.5);
+    assert_eq!(parse_dec(&fund["cagr_3y_pct"]), 18.2);
+
+    // 2. fund_holdings — success.
+    let tool = registry
+        .get("fund_holdings")
+        .expect("fund_holdings registered");
+    let out = tool
+        .execute(
+            serde_json::json!({ "scheme_code": "122639" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["count"], 2);
+    assert_eq!(out.payload["holdings"][0]["asset_name"], "RELIANCE");
+    assert_eq!(parse_dec(&out.payload["holdings"][0]["weight_pct"]), 8.4);
+
+    // 3. Honest unavailability when no MF source exists.
+    let mut fail_registry = ToolRegistry::new();
+    register_read_only_tools(
+        &mut fail_registry,
+        Arc::new(MockPortfolioReader),
+        Arc::new(MockMarketReader { fail_quotes: false }),
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: true }),
+        Arc::new(MockIpoReader { fail: false }),
+        None,
+    );
+    let err = fail_registry
+        .get("fund_search")
+        .unwrap()
+        .execute(
+            serde_json::json!({ "query": "parag" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, ToolError::Execution(..)),
+        "unavailable fund port must surface as ToolError::Execution, got {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn ipo_calendar_and_subscription_tools() {
+    let mut registry = ToolRegistry::new();
+    register_read_only_tools(
+        &mut registry,
+        Arc::new(MockPortfolioReader),
+        Arc::new(MockMarketReader { fail_quotes: false }),
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
+        None,
+    );
+
+    // 1. ipo_calendar — success.
+    let tool = registry
+        .get("ipo_calendar")
+        .expect("ipo_calendar registered");
+    assert_eq!(tool.traits().risk, ToolRisk::ReadOnly);
+    let out = tool
+        .execute(serde_json::json!({}), dummy_tool_context())
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["count"], 1);
+    let issue = &out.payload["issues"][0];
+    assert_eq!(issue["symbol"], "ZAGGLECOM");
+    assert_eq!(parse_dec(&issue["price_min"]), 140.0);
+    assert_eq!(parse_dec(&issue["price_max"]), 148.0);
+    assert_eq!(issue["lot_size"], 100);
+    assert!(issue["open_date"].is_string());
+    assert!(issue["close_date"].is_string());
+
+    // 2. ipo_subscription — success.
+    let tool = registry
+        .get("ipo_subscription")
+        .expect("ipo_subscription registered");
+    let out = tool
+        .execute(
+            serde_json::json!({ "symbol": "ZAGGLECOM" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["symbol"], "ZAGGLECOM");
+    assert_eq!(parse_dec(&out.payload["qib_multiple"]), 2.5);
+    assert_eq!(parse_dec(&out.payload["total_multiple"]), 2.6);
+
+    // 3. Honest unavailability when no IPO source exists.
+    let mut fail_registry = ToolRegistry::new();
+    register_read_only_tools(
+        &mut fail_registry,
+        Arc::new(MockPortfolioReader),
+        Arc::new(MockMarketReader { fail_quotes: false }),
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: true }),
+        None,
+    );
+    let err = fail_registry
+        .get("ipo_calendar")
+        .unwrap()
+        .execute(serde_json::json!({}), dummy_tool_context())
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, ToolError::Execution(..)),
+        "unavailable IPO port must surface as ToolError::Execution, got {err:?}"
     );
 }

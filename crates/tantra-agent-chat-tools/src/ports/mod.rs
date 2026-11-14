@@ -7,6 +7,9 @@ pub mod alert;
 pub mod calendar;
 pub mod content;
 pub mod error;
+pub mod fund;
+pub mod fundamental;
+pub mod ipo;
 pub mod market;
 pub mod portfolio;
 pub mod snapshot;
@@ -15,6 +18,9 @@ pub use alert::{AlertReader, AlertStatus, AlertWriter, PriceAlert};
 pub use calendar::{CalendarReader, EconomicCalendarQuery, EconomicEvent};
 pub use content::{ContentReader, FilingRecord, NewsArticle};
 pub use error::{PortError, PortErrorKind};
+pub use fund::{FundHolding, FundReader, MutualFundMeta};
+pub use fundamental::{FinancialStatement, FundamentalRatios, FundamentalReader};
+pub use ipo::{IpoIssue, IpoReader, IpoSubscription};
 pub use market::{
     BlockDeal, CorporateAction, DeliveryBar, InstitutionalFlow, InstrumentSearchResult,
     MacroSeries, MarketBar, MarketDepth, MarketDepthLevel, MarketHistory, MarketIndicators,

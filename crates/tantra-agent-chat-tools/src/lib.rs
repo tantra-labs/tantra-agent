@@ -16,6 +16,9 @@ pub mod calc;
 pub mod calendar;
 pub mod catalog;
 pub mod content;
+pub mod fund;
+pub mod fundamental;
+pub mod ipo;
 pub mod lift;
 pub mod market;
 pub mod portfolio;
@@ -33,6 +36,11 @@ pub use catalog::{
     create_alert_tools, create_read_only_tools, register_alert_tools, register_read_only_tools,
 };
 pub use content::{FilingsSearchInput, FilingsSearchTool, NewsSearchInput, NewsSearchTool};
+pub use fund::{FundHoldingsInput, FundHoldingsTool, FundSearchInput, FundSearchTool};
+pub use fundamental::{
+    FinancialStatementsInput, FinancialStatementsTool, FundamentalsInput, FundamentalsTool,
+};
+pub use ipo::{IpoCalendarInput, IpoCalendarTool, IpoSubscriptionInput, IpoSubscriptionTool};
 pub use lift::{PureToolAdapter, lift_regime, lift_risk, lift_screener};
 pub use market::{
     BlockDealsInput, BlockDealsTool, CorporateActionsInput, CorporateActionsTool,
@@ -49,10 +57,12 @@ pub use portfolio::{
 pub use ports::{
     AccountSummary, AlertReader, AlertStatus, AlertWriter, BlockDeal, CalendarReader,
     ContentReader, CorporateAction, DateRange, DeliveryBar, EconomicCalendarQuery, EconomicEvent,
-    FilingRecord, InstitutionalFlow, InstrumentSearchResult, MacroSeries, MarketBar, MarketDepth,
-    MarketDepthLevel, MarketHistory, MarketIndicators, MarketQuote, MarketReader, NewsArticle,
-    OiBuildupSnapshot, OptionContract, OptionsChain, OrderFilter, PortError, PortErrorKind,
-    PortfolioReader, PriceAlert, SnapshotData, SnapshotNeeds, SnapshotSource,
+    FilingRecord, FinancialStatement, FundHolding, FundReader, FundamentalRatios,
+    FundamentalReader, InstitutionalFlow, InstrumentSearchResult, IpoIssue, IpoReader,
+    IpoSubscription, MacroSeries, MarketBar, MarketDepth, MarketDepthLevel, MarketHistory,
+    MarketIndicators, MarketQuote, MarketReader, MutualFundMeta, NewsArticle, OiBuildupSnapshot,
+    OptionContract, OptionsChain, OrderFilter, PortError, PortErrorKind, PortfolioReader,
+    PriceAlert, SnapshotData, SnapshotNeeds, SnapshotSource,
 };
 pub mod strategy;
 
