@@ -33,6 +33,14 @@ use tantra_agent_chat_tools::ports::portfolio::{
     AccountSummary, DateRange, OrderFilter, PortfolioReader,
 };
 use tantra_agent_chat_tools::ports::snapshot::{SnapshotData, SnapshotNeeds, SnapshotSource};
+use tantra_agent_chat_tools::ports::strategy_store::{StrategySpec, StrategyStore};
+use tantra_agent_chat_tools::ports::tax::{ClosedLotRecord, TaxReportReader};
+use tantra_agent_chat_tools::ports::trade_intent::{
+    TradeIntent, TradeIntentSink, TradeIntentStatus,
+};
+use tantra_agent_chat_tools::statement::format_ledger_statement;
+use tantra_agent_chat_tools::tax::compute_capital_gains;
+use tantra_agent_chat_tools::trade_intent::trade_intent_to_decision;
 use tantra_agent_chat_tools::{create_alert_tools, register_alert_tools};
 use tantra_agent_core::ToolError;
 use tantra_core::{
@@ -662,6 +670,140 @@ impl IpoReader for MockIpoReader {
     }
 }
 
+struct MockTradeIntentSink {
+    fail: bool,
+}
+
+#[async_trait]
+impl TradeIntentSink for MockTradeIntentSink {
+    async fn propose_trade(&self, intent: &TradeIntent) -> Result<TradeIntentStatus, PortError> {
+        if self.fail {
+            return Err(PortError::unavailable(
+                "trade-intent sink not wired in the runtime — see tantra-runtime/docs/gaps/0007 item 17",
+            ));
+        }
+        let status = if intent.paper_trading {
+            "paper_filled"
+        } else {
+            "pending_approval"
+        };
+        Ok(TradeIntentStatus {
+            intent_id: "INT-1001".to_string(),
+            status: status.to_string(),
+            message: format!("intent for `{}` enqueued", intent.instrument),
+        })
+    }
+}
+
+struct MockStrategyStore {
+    fail: bool,
+    strategies: std::sync::Mutex<Vec<StrategySpec>>,
+}
+
+impl MockStrategyStore {
+    fn new(fail: bool) -> Self {
+        Self {
+            fail,
+            strategies: std::sync::Mutex::new(Vec::new()),
+        }
+    }
+}
+
+#[async_trait]
+impl StrategyStore for MockStrategyStore {
+    async fn save_strategy(&self, spec: &StrategySpec) -> Result<StrategySpec, PortError> {
+        if self.fail {
+            return Err(PortError::unavailable(
+                "strategy store not wired in the runtime — see tantra-runtime/docs/gaps/0007 item 18",
+            ));
+        }
+        let mut all = self.strategies.lock().unwrap();
+        if let Some(existing) = all.iter_mut().find(|s| s.strategy_id == spec.strategy_id) {
+            *existing = spec.clone();
+        } else {
+            all.push(spec.clone());
+        }
+        Ok(spec.clone())
+    }
+
+    async fn list_strategies(&self) -> Result<Vec<StrategySpec>, PortError> {
+        if self.fail {
+            return Err(PortError::unavailable(
+                "strategy store not wired in the runtime — see tantra-runtime/docs/gaps/0007 item 18",
+            ));
+        }
+        Ok(self.strategies.lock().unwrap().clone())
+    }
+
+    async fn get_strategy(&self, strategy_id: &str) -> Result<StrategySpec, PortError> {
+        if self.fail {
+            return Err(PortError::unavailable(
+                "strategy store not wired in the runtime — see tantra-runtime/docs/gaps/0007 item 18",
+            ));
+        }
+        self.strategies
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|s| s.strategy_id == strategy_id)
+            .cloned()
+            .ok_or_else(|| PortError::not_found(format!("strategy `{strategy_id}` not found")))
+    }
+
+    async fn delete_strategy(&self, strategy_id: &str) -> Result<bool, PortError> {
+        if self.fail {
+            return Err(PortError::unavailable(
+                "strategy store not wired in the runtime — see tantra-runtime/docs/gaps/0007 item 18",
+            ));
+        }
+        let mut all = self.strategies.lock().unwrap();
+        let before = all.len();
+        all.retain(|s| s.strategy_id != strategy_id);
+        Ok(all.len() != before)
+    }
+}
+
+struct MockTaxReportReader {
+    fail: bool,
+}
+
+#[async_trait]
+impl TaxReportReader for MockTaxReportReader {
+    async fn closed_lots(
+        &self,
+        _account: &AccountId,
+        _range: DateRange,
+    ) -> Result<Vec<ClosedLotRecord>, PortError> {
+        if self.fail {
+            return Err(PortError::unavailable(
+                "matched-lot bridge not wired in the runtime — see tantra-runtime/docs/gaps/0007 item 19",
+            ));
+        }
+        Ok(vec![
+            ClosedLotRecord {
+                lot_id: "LOT-ST-1".to_string(),
+                instrument: InstrumentId::new(Exchange::Nse, "RELIANCE"),
+                quantity: Quantity(dec!(100.0)),
+                entry_price: Price(dec!(2000.0)),
+                exit_price: Price(dec!(2500.0)),
+                realized_pnl: Money::inr(dec!(50000.0)),
+                holding_period_days: 90,
+                is_long_term: false,
+            },
+            ClosedLotRecord {
+                lot_id: "LOT-LT-1".to_string(),
+                instrument: InstrumentId::new(Exchange::Nse, "TCS"),
+                quantity: Quantity(dec!(10.0)),
+                entry_price: Price(dec!(3000.0)),
+                exit_price: Price(dec!(3400.0)),
+                realized_pnl: Money::inr(dec!(4000.0)),
+                holding_period_days: 500,
+                is_long_term: true,
+            },
+        ])
+    }
+}
+
 struct MockPortfolioReader;
 
 #[async_trait]
@@ -982,6 +1124,7 @@ async fn test_market_tools() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         Some(snapshot),
     );
 
@@ -1068,6 +1211,7 @@ async fn test_block_deals_tools() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
 
@@ -1115,6 +1259,7 @@ async fn test_block_deals_tools() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
     let err = fail_registry
@@ -1144,6 +1289,7 @@ async fn test_content_tools() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
 
@@ -1250,6 +1396,7 @@ async fn test_content_tools() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
     for name in ["news_search", "filings_search"] {
@@ -1293,6 +1440,7 @@ async fn test_options_and_corporate_actions_tools() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
 
@@ -1415,6 +1563,7 @@ async fn test_options_and_corporate_actions_tools() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
     for (name, input) in [
@@ -1630,6 +1779,7 @@ async fn test_portfolio_tools() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
 
@@ -1734,6 +1884,7 @@ async fn test_portfolio_graceful_degradation_without_quotes() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
 
@@ -1772,6 +1923,7 @@ async fn test_lifted_pure_tools() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         Some(snapshot),
     );
 
@@ -1833,10 +1985,11 @@ async fn test_total_read_only_catalogue_count() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
     let specs = registry.specs();
-    assert_eq!(specs.len(), 30);
+    assert_eq!(specs.len(), 32);
 
     for spec in &specs {
         let tool = registry.get(&spec.name).unwrap();
@@ -1956,6 +2109,7 @@ async fn market_depth_tool_returns_ladder() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
 
@@ -2002,6 +2156,7 @@ async fn market_depth_tool_returns_ladder() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
     let err = fail_registry
@@ -2034,6 +2189,7 @@ async fn institutional_flows_tool_returns_flows() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
 
@@ -2072,6 +2228,7 @@ async fn economic_calendar_tool_filters_and_limits() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
 
@@ -2139,6 +2296,7 @@ async fn delivery_analysis_tool_returns_delivery_bars() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
 
@@ -2190,6 +2348,7 @@ async fn delivery_analysis_tool_returns_delivery_bars() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
     let err = fail_registry
@@ -2235,6 +2394,7 @@ async fn oi_buildup_tool_returns_classification() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
 
@@ -2272,6 +2432,7 @@ async fn oi_buildup_tool_returns_classification() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
     let err = fail_registry
@@ -2316,6 +2477,7 @@ async fn fundamentals_and_statements_tools() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
 
@@ -2389,6 +2551,7 @@ async fn fundamentals_and_statements_tools() {
         Arc::new(MockFundamentalReader { fail: true }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
     for name in ["fundamental_ratios", "financial_statements"] {
@@ -2422,6 +2585,7 @@ async fn fund_search_and_holdings_tools() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
 
@@ -2472,6 +2636,7 @@ async fn fund_search_and_holdings_tools() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: true }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
     let err = fail_registry
@@ -2503,6 +2668,7 @@ async fn ipo_calendar_and_subscription_tools() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
 
@@ -2554,6 +2720,7 @@ async fn ipo_calendar_and_subscription_tools() {
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
         Arc::new(MockIpoReader { fail: true }),
+        Arc::new(MockTaxReportReader { fail: false }),
         None,
     );
     let err = fail_registry
@@ -2566,4 +2733,370 @@ async fn ipo_calendar_and_subscription_tools() {
         matches!(err, ToolError::Execution(..)),
         "unavailable IPO port must surface as ToolError::Execution, got {err:?}"
     );
+}
+
+#[tokio::test]
+async fn test_propose_trade_tool() {
+    use tantra_agent_chat_tools::catalog::{create_trade_tools, register_trade_tools};
+    use tantra_core::decision::Decision;
+
+    // 1. Pure intent → Decision formulation (closed grammar).
+    let intent = TradeIntent {
+        algo_id: "momentum-alpha-v1".to_string(),
+        instrument: InstrumentId::new(Exchange::Nse, "RELIANCE"),
+        side: "buy".to_string(),
+        order_type: "limit".to_string(),
+        quantity: Quantity(dec!(100.0)),
+        price: Some(Price(dec!(2500.0))),
+        paper_trading: false,
+        rationale: Some("test".to_string()),
+    };
+    let decision = trade_intent_to_decision(&intent).unwrap();
+    assert!(matches!(
+        decision,
+        Decision::PlaceOrder {
+            symbol,
+            side: OrderSide::Buy,
+            qty,
+            price_limit: Some(_),
+            algo_id,
+            ..
+        } if symbol == "RELIANCE" && qty.0 == dec!(100.0) && algo_id == "momentum-alpha-v1"
+    ));
+
+    // 2. Validation rejects bad intents.
+    let bad_qty = TradeIntent {
+        quantity: Quantity(dec!(0.0)),
+        ..intent.clone()
+    };
+    assert!(trade_intent_to_decision(&bad_qty).is_err());
+    let bad_side = TradeIntent {
+        side: "hold".to_string(),
+        ..intent.clone()
+    };
+    assert!(trade_intent_to_decision(&bad_side).is_err());
+    let limit_without_price = TradeIntent {
+        price: None,
+        ..intent.clone()
+    };
+    assert!(trade_intent_to_decision(&limit_without_price).is_err());
+
+    // 3. Tool submission — approval vs paper mode.
+    let sink = Arc::new(MockTradeIntentSink { fail: false });
+    let store = Arc::new(MockStrategyStore::new(false));
+    let mut registry = ToolRegistry::new();
+    register_trade_tools(&mut registry, sink.clone(), store);
+    let tool = registry
+        .get("propose_trade")
+        .expect("propose_trade registered");
+    assert_eq!(tool.traits().risk, ToolRisk::LocalWrite);
+
+    let out = tool
+        .execute(
+            serde_json::json!({
+                "instrument": "NSE:RELIANCE",
+                "side": "buy",
+                "order_type": "limit",
+                "quantity": "100",
+                "price": "2500",
+                "algo_id": "momentum-alpha-v1"
+            }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["status"], "pending_approval");
+    assert_eq!(out.payload["intent_id"], "INT-1001");
+
+    let out = tool
+        .execute(
+            serde_json::json!({
+                "instrument": "NSE:RELIANCE",
+                "side": "sell",
+                "order_type": "market",
+                "quantity": "50",
+                "algo_id": "momentum-alpha-v1",
+                "paper_trading": true
+            }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["status"], "paper_filled");
+
+    // 4. Invalid arguments rejected (bad algo id, non-positive quantity, unknown field).
+    for bad in [
+        serde_json::json!({
+            "instrument": "NSE:RELIANCE",
+            "side": "buy",
+            "order_type": "market",
+            "quantity": "10",
+            "algo_id": "x"
+        }),
+        serde_json::json!({
+            "instrument": "NSE:RELIANCE",
+            "side": "buy",
+            "order_type": "market",
+            "quantity": "0",
+            "algo_id": "momentum-alpha-v1"
+        }),
+        serde_json::json!({ "bogus": true }),
+    ] {
+        let err = tool.execute(bad, dummy_tool_context()).await.unwrap_err();
+        assert!(
+            matches!(err, ToolError::InvalidArguments { .. }),
+            "bad input must surface as ToolError::InvalidArguments, got {err:?}"
+        );
+    }
+
+    // 5. Honest unavailability when no sink is wired.
+    let mut fail_registry = ToolRegistry::new();
+    register_trade_tools(
+        &mut fail_registry,
+        Arc::new(MockTradeIntentSink { fail: true }),
+        Arc::new(MockStrategyStore::new(false)),
+    );
+    let err = fail_registry
+        .get("propose_trade")
+        .unwrap()
+        .execute(
+            serde_json::json!({
+                "instrument": "NSE:RELIANCE",
+                "side": "buy",
+                "order_type": "market",
+                "quantity": "10",
+                "algo_id": "momentum-alpha-v1"
+            }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, ToolError::Execution(..)),
+        "unavailable sink must surface as ToolError::Execution, got {err:?}"
+    );
+
+    // 6. The trade bundle is exactly 2 LocalWrite tools.
+    let bundle = create_trade_tools(sink, Arc::new(MockStrategyStore::new(false)));
+    assert_eq!(bundle.len(), 2);
+}
+
+#[tokio::test]
+async fn test_strategy_manage_tool() {
+    use tantra_agent_chat_tools::catalog::register_trade_tools;
+
+    let store = Arc::new(MockStrategyStore::new(false));
+    let mut registry = ToolRegistry::new();
+    register_trade_tools(
+        &mut registry,
+        Arc::new(MockTradeIntentSink { fail: false }),
+        store.clone(),
+    );
+    let tool = registry
+        .get("strategy_manage")
+        .expect("strategy_manage registered");
+    assert_eq!(tool.traits().risk, ToolRisk::LocalWrite);
+
+    // 1. create → inspect → list → delete round-trip.
+    let create = tool
+        .execute(
+            serde_json::json!({
+                "operation": "create",
+                "strategy_id": "turtle_breakout",
+                "name": "Turtle Breakout",
+                "instruments": "NSE:NIFTY50-INDEX",
+                "parameters": [{
+                    "name": "entry",
+                    "default": "20",
+                    "min": "5",
+                    "max": "50",
+                    "step": "1"
+                }]
+            }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(create.ok);
+    assert_eq!(create.payload["strategy"]["strategy_id"], "turtle_breakout");
+
+    let inspect = tool
+        .execute(
+            serde_json::json!({ "operation": "inspect", "strategy_id": "turtle_breakout" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(inspect.ok);
+    assert_eq!(
+        inspect.payload["strategy"]["instruments"][0],
+        "NSE:NIFTY50-INDEX"
+    );
+    assert_eq!(
+        inspect.payload["strategy"]["parameters"][0]["name"],
+        "entry"
+    );
+
+    let list = tool
+        .execute(
+            serde_json::json!({ "operation": "list" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(list.ok);
+    assert_eq!(list.payload["count"], 1);
+
+    let delete = tool
+        .execute(
+            serde_json::json!({ "operation": "delete", "strategy_id": "turtle_breakout" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(delete.ok);
+    assert_eq!(delete.payload["deleted"], true);
+
+    // 2. Validation: create without instruments / unknown operation / unknown field.
+    let err = tool
+        .execute(
+            serde_json::json!({ "operation": "create", "strategy_id": "s1" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ToolError::InvalidArguments { .. }));
+    let err = tool
+        .execute(
+            serde_json::json!({ "operation": "explode" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ToolError::InvalidArguments { .. }));
+
+    // 3. Honest unavailability when no store is wired.
+    let mut fail_registry = ToolRegistry::new();
+    register_trade_tools(
+        &mut fail_registry,
+        Arc::new(MockTradeIntentSink { fail: false }),
+        Arc::new(MockStrategyStore::new(true)),
+    );
+    let err = fail_registry
+        .get("strategy_manage")
+        .unwrap()
+        .execute(
+            serde_json::json!({ "operation": "list" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, ToolError::Execution(..)),
+        "unavailable store must surface as ToolError::Execution, got {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_tax_and_statement_tools() {
+    // 1. Pure tax math on the mock closed lots: STCG 50_000 → 20% = 10_000;
+    //    LTCG 4_000 is under the 1.25L exemption → no LTCG tax.
+    let lots = MockTaxReportReader { fail: false }
+        .closed_lots(&AccountId::new("ACC-01"), DateRange::new(None, None))
+        .await
+        .unwrap();
+    let summary = compute_capital_gains(&lots);
+    assert_eq!(summary.stcg_pnl.amount, dec!(50000.0));
+    assert_eq!(summary.ltcg_pnl.amount, dec!(4000.0));
+    assert_eq!(summary.stcg_tax.amount, dec!(10000.0));
+    assert_eq!(summary.ltcg_taxable.amount, Decimal::ZERO);
+    assert_eq!(summary.ltcg_tax.amount, Decimal::ZERO);
+    assert_eq!(summary.total_tax.amount, dec!(10000.0));
+
+    // 2. Statement formatting is a markdown table containing the lots + summary.
+    let statement = format_ledger_statement(&lots);
+    assert!(statement.contains("| LOT-ST-1 |"));
+    assert!(statement.contains("| LOT-LT-1 |"));
+    assert!(statement.contains("STCG tax (20%): 10000"));
+
+    // 3. Tool surface via the read-only bundle.
+    let mut registry = ToolRegistry::new();
+    register_read_only_tools(
+        &mut registry,
+        Arc::new(MockPortfolioReader),
+        Arc::new(MockMarketReader { fail_quotes: false }),
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
+        None,
+    );
+    let tax = registry.get("tax_report").expect("tax_report registered");
+    assert_eq!(tax.traits().risk, ToolRisk::ReadOnly);
+    let out = tax
+        .execute(
+            serde_json::json!({ "account": "ACC-01" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["count"], 2);
+    assert_eq!(parse_dec(&out.payload["summary"]["total_tax"]), 10000.0);
+
+    let stmt = registry
+        .get("ledger_statement")
+        .expect("ledger_statement registered");
+    let out = stmt
+        .execute(
+            serde_json::json!({ "account": "ACC-01" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert!(
+        out.payload["statement"]
+            .as_str()
+            .unwrap()
+            .contains("LOT-ST-1")
+    );
+
+    // 4. Honest unavailability when no matched-lot bridge exists.
+    let mut fail_registry = ToolRegistry::new();
+    register_read_only_tools(
+        &mut fail_registry,
+        Arc::new(MockPortfolioReader),
+        Arc::new(MockMarketReader { fail_quotes: false }),
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: true }),
+        None,
+    );
+    for name in ["tax_report", "ledger_statement"] {
+        let err = fail_registry
+            .get(name)
+            .unwrap()
+            .execute(
+                serde_json::json!({ "account": "ACC-01" }),
+                dummy_tool_context(),
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, ToolError::Execution(..)),
+            "unavailable tax port must surface as ToolError::Execution, got {err:?}"
+        );
+    }
 }

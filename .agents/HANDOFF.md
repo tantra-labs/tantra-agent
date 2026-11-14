@@ -4,6 +4,20 @@
 
 ## Phase / Slice Status
 
+- **T6.10 (plan 0007 Track 5 — tool surface, 2026-11-14)**: safe trade intent / strategy
+  CRUD / tax shipped:
+  - Trade intent (Ph 12, NoFX approval-queue pattern): `TradeIntentSink` port + `propose_trade`
+    LocalWrite tool formulating a closed `Decision::PlaceOrder`; runtime sink answers
+    unavailable citing runtime gap 0007 item 17.
+  - Strategy CRUD (Ph 13, Jesse-MCP): `StrategyStore` port + `strategy_manage` LocalWrite
+    tool (create/list/inspect/delete); runtime store answers unavailable citing item 18.
+  - Tax & statements (Ph 14): `TaxReportReader` port + pure `compute_capital_gains`
+    (STCG 20% flat, LTCG 12.5% over ₹1.25L exemption, exact Decimal) + `tax_report`/
+    `ledger_statement` ReadOnly tools with markdown statements; runtime reader answers
+    unavailable citing item 19.
+  - Catalogue 30→32 read-only + 2 LocalWrite trade tools; 25 unit tests green; fmt + clippy
+    `-D warnings` clean. Deep wiring (FileJobRegistry enqueue, strategy store, matched-lot
+    bridge) tracked by runtime gap 0007 items 17–19.
 - **T6.8 (plan 0007 Track 3 — tool surface, 2026-11-14)**: fundamentals / mutual funds /
   IPO chat-tool surface shipped:
   - 3 new ports + 6 new ReadOnly tools (catalogue **24 → 30**): `FundamentalReader`
@@ -74,20 +88,19 @@
     SSE transport noted shipped).
 - **Plan 0006 (MCP/chat tool catalog expansion) — complete**: Phases 1–4 implemented
   (2026-11-11/12) and recorded in `docs/plans/README.md` Implemented table. Full detail in the
-  README + git history; catalogue is 30 read-only + 2 alert + 3 strategy tools.
+  README + git history; catalogue is 32 read-only + 2 alert + 2 trade + 3 strategy tools.
 - **Plans 0001–0005**: complete and merged — see `docs/plans/README.md` Implemented table.
 
 ## Immediate Next Step
 
-- **Plan 0007 remaining tracks (open)**: Track 3 data ingestion is tracked by `tantra-data`
-  gaps 0020–0022 (fundamentals / mutual funds / IPO) — the chat-tool surface is shipped;
-  Track 5 (T6.10 safe trade-intent bridge via NoFX approval queue + paper sandbox, strategy
-  CRUD, tax — the largest remaining slice) is the only open T6 task.
-- **Plan 0010 (T6.12, Implemented)**: tool surface + composite strategy shipped; close the
-  upstream bridges to turn the stubs real — `tantra-data` 0017 (institutional-flow bridge) +
-  0019 (delivery bridge), `tantra-market` 0006 (L2 depth), and wire
-  `ParquetOpenInterestStore` + `BuildupAnalyzer` into `FeedMarketReader::oi_buildup`
-  (runtime gap 0007 item 13).
+- **T6 track complete (2026-11-14)**. Follow-ons tracked by upstream gaps/docs:
+  - Track 3 data ingestion: `tantra-data` gaps 0020–0022 (fundamentals / mutual funds / IPO).
+  - Track 5 deep wiring: runtime gap 0007 items 17 (FileJobRegistry-backed `TradeIntentSink`
+    + paper sandbox), 18 (strategy-manifest `StrategyStore`), 19 (matched-lot `TaxReportReader`
+    bridge).
+  - Plan 0010 (T6.12, Implemented): close `tantra-data` 0017/0019, `tantra-market` 0006, and
+    wire `ParquetOpenInterestStore` + `BuildupAnalyzer` into `FeedMarketReader::oi_buildup`
+    (runtime gap 0007 item 13).
 - **R4 architectural-dependency test** (pre-existing): decide whether to drop the
   `tantra-agent-mcp` → `tantra-ledger-allocation` dep or widen R4 to allow mcp.
 - **Filing discipline**: new chat-tool categories need provider-repo gap docs (`tantra-data`
@@ -107,7 +120,7 @@ flow tracked by `tantra-ui/docs/plans/0007`.
 - Plan numbering collision fixed: active plans 0008/0009 replace the reused `0002`/`0003`
   numbers (implemented plans 0001–0006 keep theirs). Gap 0002 closed in the index; gap
   numbers are never reused per `.agents/rules/gap-tracking.md`.
-- Chat catalogue: **30 read-only tools** (`test_total_read_only_catalogue_count` pins the count)
+- Chat catalogue: **32 read-only tools** (`test_total_read_only_catalogue_count` pins the count)
   **plus** the 2-tool alert bundle and 3 strategy tools. Content (Phase 3) and
   options-chain/corporate-actions (Phase 4) tools all went into the main all-ReadOnly bundle
   (unlike the LocalWrite alert CRUD, which sits outside so its count-pin invariant stays

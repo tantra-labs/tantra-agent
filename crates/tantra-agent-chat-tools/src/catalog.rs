@@ -27,8 +27,15 @@ use crate::ports::ipo::IpoReader;
 use crate::ports::market::MarketReader;
 use crate::ports::portfolio::PortfolioReader;
 use crate::ports::snapshot::SnapshotSource;
+use crate::ports::strategy_store::StrategyStore;
+use crate::ports::tax::TaxReportReader;
+use crate::ports::trade_intent::TradeIntentSink;
+use crate::statement::LedgerStatementTool;
+use crate::strategy_manage::StrategyManageTool;
+use crate::tax::TaxReportTool;
+use crate::trade_intent::ProposeTradeTool;
 
-/// Bundle of all 30 Phase B read-only conversational tools (§6.5).
+/// Bundle of all 32 Phase B read-only conversational tools (§6.5).
 ///
 /// The port set grows one `Arc<dyn ...>` reader per tool category; the flat signature
 /// deliberately mirrors `register_read_only_tools` and is allowed past clippy's
@@ -42,6 +49,7 @@ pub fn create_read_only_tools(
     fundamental: Arc<dyn FundamentalReader>,
     fund: Arc<dyn FundReader>,
     ipo: Arc<dyn IpoReader>,
+    tax: Arc<dyn TaxReportReader>,
     snapshots: Option<Arc<dyn SnapshotSource>>,
 ) -> Vec<Arc<dyn ChatTool>> {
     vec![
@@ -92,10 +100,13 @@ pub fn create_read_only_tools(
         Arc::new(FundHoldingsTool::new(Arc::clone(&fund))),
         Arc::new(IpoCalendarTool::new(Arc::clone(&ipo))),
         Arc::new(IpoSubscriptionTool::new(ipo)),
+        // 9. Plan 0007 Track 5 tax / statements (2)
+        Arc::new(TaxReportTool::new(Arc::clone(&tax))),
+        Arc::new(LedgerStatementTool::new(tax)),
     ]
 }
 
-/// Register all 30 Phase B read-only chat tools into a registry (§6.5).
+/// Register all 32 Phase B read-only chat tools into a registry (§6.5).
 #[allow(clippy::too_many_arguments)]
 pub fn register_read_only_tools(
     registry: &mut ToolRegistry,
@@ -106,6 +117,7 @@ pub fn register_read_only_tools(
     fundamental: Arc<dyn FundamentalReader>,
     fund: Arc<dyn FundReader>,
     ipo: Arc<dyn IpoReader>,
+    tax: Arc<dyn TaxReportReader>,
     snapshots: Option<Arc<dyn SnapshotSource>>,
 ) {
     let tools = create_read_only_tools(
@@ -116,6 +128,7 @@ pub fn register_read_only_tools(
         fundamental,
         fund,
         ipo,
+        tax,
         snapshots,
     );
     registry.register_all(tools);
@@ -143,6 +156,33 @@ pub fn register_alert_tools(
     writer: Arc<dyn AlertWriter>,
 ) {
     let tools = create_alert_tools(reader, writer);
+    registry.register_all(tools);
+}
+
+/// Bundle of the 2 safe trade tools (§6.5, plan 0007 Track 5): `propose_trade`
+/// (trade-intent bridge) and `strategy_manage` (strategy CRUD) are both
+/// `ToolRisk::LocalWrite` — platform-managed state or gated intents, not read-only
+/// queries, so they live outside [`create_read_only_tools`] and its all-`ReadOnly`
+/// catalogue-count invariant (same shape as the alert bundle).
+pub fn create_trade_tools(
+    sink: Arc<dyn TradeIntentSink>,
+    store: Arc<dyn StrategyStore>,
+) -> Vec<Arc<dyn ChatTool>> {
+    vec![
+        // 1. Safe trade intent (LocalWrite, approval-queue pattern)
+        Arc::new(ProposeTradeTool::new(sink)),
+        // 2. Strategy manifest CRUD (LocalWrite)
+        Arc::new(StrategyManageTool::new(store)),
+    ]
+}
+
+/// Register the 2 safe trade tools into a registry (§6.5).
+pub fn register_trade_tools(
+    registry: &mut ToolRegistry,
+    sink: Arc<dyn TradeIntentSink>,
+    store: Arc<dyn StrategyStore>,
+) {
+    let tools = create_trade_tools(sink, store);
     registry.register_all(tools);
 }
 

@@ -23,6 +23,10 @@ pub mod lift;
 pub mod market;
 pub mod portfolio;
 pub mod ports;
+pub mod statement;
+pub mod strategy_manage;
+pub mod tax;
+pub mod trade_intent;
 
 pub use alert::{
     AlertOperation, PriceAlertInput, PriceAlertListInput, PriceAlertListTool, PriceAlertTool,
@@ -33,7 +37,8 @@ pub use calc::{
 };
 pub use calendar::{EconomicCalendarInput, EconomicCalendarTool};
 pub use catalog::{
-    create_alert_tools, create_read_only_tools, register_alert_tools, register_read_only_tools,
+    create_alert_tools, create_read_only_tools, create_trade_tools, register_alert_tools,
+    register_read_only_tools, register_trade_tools,
 };
 pub use content::{FilingsSearchInput, FilingsSearchTool, NewsSearchInput, NewsSearchTool};
 pub use fund::{FundHoldingsInput, FundHoldingsTool, FundSearchInput, FundSearchTool};
@@ -56,19 +61,25 @@ pub use portfolio::{
 };
 pub use ports::{
     AccountSummary, AlertReader, AlertStatus, AlertWriter, BlockDeal, CalendarReader,
-    ContentReader, CorporateAction, DateRange, DeliveryBar, EconomicCalendarQuery, EconomicEvent,
-    FilingRecord, FinancialStatement, FundHolding, FundReader, FundamentalRatios,
+    ClosedLotRecord, ContentReader, CorporateAction, DateRange, DeliveryBar, EconomicCalendarQuery,
+    EconomicEvent, FilingRecord, FinancialStatement, FundHolding, FundReader, FundamentalRatios,
     FundamentalReader, InstitutionalFlow, InstrumentSearchResult, IpoIssue, IpoReader,
     IpoSubscription, MacroSeries, MarketBar, MarketDepth, MarketDepthLevel, MarketHistory,
     MarketIndicators, MarketQuote, MarketReader, MutualFundMeta, NewsArticle, OiBuildupSnapshot,
     OptionContract, OptionsChain, OrderFilter, PortError, PortErrorKind, PortfolioReader,
-    PriceAlert, SnapshotData, SnapshotNeeds, SnapshotSource,
+    PriceAlert, SnapshotData, SnapshotNeeds, SnapshotSource, StrategyParameterSpec, StrategySpec,
+    StrategyStore, TaxReportReader, TradeIntent, TradeIntentSink, TradeIntentStatus,
+    intent_notional,
 };
 pub mod strategy;
 
 pub use catalog::{create_strategy_tools, register_strategy_tools};
 pub use ports::strategy::{DefaultStrategyRunner, StrategyRunner};
+pub use statement::{LedgerStatementInput, LedgerStatementTool};
 pub use strategy::{
     StrategyRunInput, StrategyRunTool, StrategyTuneInput, StrategyTuneTool, TradeSuggestionInput,
     TradeSuggestionTool,
 };
+pub use strategy_manage::{StrategyManageInput, StrategyManageTool};
+pub use tax::{TaxReportInput, TaxReportTool};
+pub use trade_intent::{ProposeTradeInput, ProposeTradeTool};
