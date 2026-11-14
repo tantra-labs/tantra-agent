@@ -1011,3 +1011,194 @@ impl ChatTool for InstitutionalFlowsTool {
         ))
     }
 }
+
+// ——————————————————————————————————————————————————————————————————————————
+// 11. delivery_analysis
+// ——————————————————————————————————————————————————————————————————————————
+
+/// Maximum number of delivery observations returned per call (token budget cap, §6.5).
+pub const MAX_DELIVERY_DAYS: usize = 50;
+
+/// Input arguments for `delivery_analysis`.
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct DeliveryAnalysisInput {
+    /// Instrument symbol (e.g. "NSE:RELIANCE", "TCS").
+    pub instrument: String,
+    /// Inclusive start timestamp (RFC3339).
+    pub start: Option<String>,
+    /// Exclusive end timestamp (RFC3339).
+    pub end: Option<String>,
+    /// Maximum number of days to return (capped at 50).
+    pub limit: Option<usize>,
+}
+
+/// Chat tool fetching delivery-adjusted volume history for an instrument
+/// (plan 0010 Phase 2 — leg 1 of the composite smart-money signal).
+pub struct DeliveryAnalysisTool {
+    reader: Arc<dyn MarketReader>,
+    spec: ToolSpec,
+}
+
+impl DeliveryAnalysisTool {
+    /// Create new delivery-analysis tool.
+    pub fn new(reader: Arc<dyn MarketReader>) -> Self {
+        let schema = schemars::schema_for!(DeliveryAnalysisInput);
+        let spec = ToolSpec::new(
+            "delivery_analysis",
+            "Fetch delivery-adjusted volume history (traded/delivered quantity and delivery %) for an instrument.",
+            serde_json::to_value(schema).unwrap_or_default(),
+        );
+        Self { reader, spec }
+    }
+}
+
+#[async_trait]
+impl ChatTool for DeliveryAnalysisTool {
+    fn spec(&self) -> &ToolSpec {
+        &self.spec
+    }
+
+    fn traits(&self) -> ToolTraits {
+        ToolTraits::new(ToolRisk::ReadOnly)
+    }
+
+    fn plan(&self, input: &Value, _ctx: &PlanContext<'_>) -> Result<ToolPlan, ToolError> {
+        let inst = input
+            .get("instrument")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        Ok(ToolPlan::new(format!(
+            "Fetch delivery-adjusted volume for `{inst}`"
+        )))
+    }
+
+    async fn execute(&self, input: Value, _ctx: ToolContext) -> Result<ToolOutput, ToolError> {
+        let args: DeliveryAnalysisInput =
+            serde_json::from_value(input).map_err(|e| ToolError::InvalidArguments {
+                tool: "delivery_analysis".to_string(),
+                message: format!("schema validation failure: {e}"),
+            })?;
+
+        let inst = parse_instrument(&args.instrument)?;
+        let start_dt = args.start.as_deref().and_then(parse_timestamp);
+        let end_dt = args.end.as_deref().and_then(parse_timestamp);
+        let range = DateRange::new(start_dt, end_dt);
+        let capped_limit = match args.limit {
+            Some(l) => Some(l.min(MAX_DELIVERY_DAYS)),
+            None => Some(MAX_DELIVERY_DAYS),
+        };
+
+        let bars = self
+            .reader
+            .delivery_stats(&inst, range, capped_limit)
+            .await
+            .map_err(|e| e.into_tool_error("delivery_analysis"))?;
+
+        let bars_json: Vec<Value> = bars
+            .into_iter()
+            .take(MAX_DELIVERY_DAYS)
+            .map(|b| {
+                serde_json::json!({
+                    "instrument": b.instrument.to_string(),
+                    "date": b.date,
+                    "traded_qty": b.traded_qty.0,
+                    "delivered_qty": b.delivered_qty.0,
+                    "delivery_pct": b.delivery_pct,
+                })
+            })
+            .collect();
+
+        Ok(ToolOutput::ok(
+            "delivery_analysis",
+            serde_json::json!({
+                "delivery": bars_json,
+                "count": bars_json.len(),
+            }),
+        ))
+    }
+}
+
+// ——————————————————————————————————————————————————————————————————————————
+// 12. oi_buildup
+// ——————————————————————————————————————————————————————————————————————————
+
+/// Default OI-buildup lookback window in trading days when the caller passes none.
+pub const DEFAULT_LOOKBACK_DAYS: u32 = 5;
+
+/// Input arguments for `oi_buildup`.
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct OiBuildupInput {
+    /// Instrument symbol (e.g. "NFO:NIFTY26NOV24000CE", "NSE:RELIANCE").
+    pub instrument: String,
+    /// Lookback window in trading days (default 5).
+    pub lookback_days: Option<u32>,
+}
+
+/// Chat tool classifying open-interest buildup direction over a lookback window
+/// (plan 0010 Phase 3 — leg 4 of the composite smart-money signal).
+pub struct OiBuildupTool {
+    reader: Arc<dyn MarketReader>,
+    spec: ToolSpec,
+}
+
+impl OiBuildupTool {
+    /// Create new OI-buildup tool.
+    pub fn new(reader: Arc<dyn MarketReader>) -> Self {
+        let schema = schemars::schema_for!(OiBuildupInput);
+        let spec = ToolSpec::new(
+            "oi_buildup",
+            "Classify open-interest buildup direction (long/short buildup, short covering, long unwinding) for an instrument.",
+            serde_json::to_value(schema).unwrap_or_default(),
+        );
+        Self { reader, spec }
+    }
+}
+
+#[async_trait]
+impl ChatTool for OiBuildupTool {
+    fn spec(&self) -> &ToolSpec {
+        &self.spec
+    }
+
+    fn traits(&self) -> ToolTraits {
+        ToolTraits::new(ToolRisk::ReadOnly)
+    }
+
+    fn plan(&self, input: &Value, _ctx: &PlanContext<'_>) -> Result<ToolPlan, ToolError> {
+        let inst = input
+            .get("instrument")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        Ok(ToolPlan::new(format!("Classify OI buildup for `{inst}`")))
+    }
+
+    async fn execute(&self, input: Value, _ctx: ToolContext) -> Result<ToolOutput, ToolError> {
+        let args: OiBuildupInput =
+            serde_json::from_value(input).map_err(|e| ToolError::InvalidArguments {
+                tool: "oi_buildup".to_string(),
+                message: format!("schema validation failure: {e}"),
+            })?;
+
+        let inst = parse_instrument(&args.instrument)?;
+        let lookback = args.lookback_days.unwrap_or(DEFAULT_LOOKBACK_DAYS);
+        let snapshot = self
+            .reader
+            .oi_buildup(&inst, Some(lookback))
+            .await
+            .map_err(|e| e.into_tool_error("oi_buildup"))?;
+
+        Ok(ToolOutput::ok(
+            "oi_buildup",
+            serde_json::json!({
+                "instrument": snapshot.instrument.to_string(),
+                "as_of": snapshot.as_of,
+                "open_interest": snapshot.open_interest.0,
+                "oi_change_pct": snapshot.oi_change_pct,
+                "price_change_pct": snapshot.price_change_pct,
+                "classification": snapshot.classification,
+            }),
+        ))
+    }
+}

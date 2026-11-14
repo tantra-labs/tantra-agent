@@ -6,9 +6,10 @@
 & options-positioning wire types), `tantra-market` (gap 0005 — indicator feeds;
 gaps 0001/0002 already closed for chain + OI), `tantra-data` (gap 0016 —
 snapshot lakehouse)
-**Overlaps with / cites**: [plan 0010](0010-institutional-smart-money-detection-suite.md)
-(OI-buildup chat tools) — this plan adds the *level-map* read surface on top of
-the same data legs; no duplication of the buildup classification itself.
+**Overlaps with / cites**: [plan 0010](README.md#implemented-plans) (Institutional /
+Smart-Money Detection Suite — Implemented; OI-buildup chat tools) — this plan adds the
+*level-map* read surface on top of the same data legs; no duplication of the buildup
+classification itself.
 
 ## 0. Objective
 

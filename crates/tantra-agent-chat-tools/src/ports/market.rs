@@ -205,6 +205,44 @@ pub struct InstitutionalFlow {
     pub trade_date: DateTime<Utc>,
 }
 
+/// One day's delivery-adjusted volume observation (plan 0010 Phase 2).
+///
+/// `delivery_pct` is the exact `delivered_qty / traded_qty * 100` ratio — computed and
+/// stored as `Decimal`, never a float ratio.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DeliveryBar {
+    /// Instrument the delivery observation belongs to.
+    pub instrument: InstrumentId,
+    /// Trade date the observation was taken for.
+    pub date: DateTime<Utc>,
+    /// Total quantity traded that day.
+    pub traded_qty: Quantity,
+    /// Quantity delivered into demat that day.
+    pub delivered_qty: Quantity,
+    /// Delivery percentage = delivered / traded * 100, as an exact decimal.
+    pub delivery_pct: Decimal,
+}
+
+/// One instrument's open-interest buildup classification over a window (plan 0010 Phase 3).
+///
+/// `classification` is one of `"long_buildup"` (price↑, OI↑) | `"short_buildup"`
+/// (price↓, OI↑) | `"short_covering"` (price↑, OI↓) | `"long_unwinding"` (price↓, OI↓).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct OiBuildupSnapshot {
+    /// The instrument whose position was analysed.
+    pub instrument: InstrumentId,
+    /// End-of-window snapshot timestamp.
+    pub as_of: DateTime<Utc>,
+    /// Open interest at the end of the window.
+    pub open_interest: Quantity,
+    /// Open-interest change over the window as a percent of the window-start value.
+    pub oi_change_pct: Option<Decimal>,
+    /// Close-to-close price change over the window as a percent of the window-start close.
+    pub price_change_pct: Option<Decimal>,
+    /// The four-quadrant class: `long_buildup` | `short_buildup` | `short_covering` | `long_unwinding`.
+    pub classification: String,
+}
+
 /// Read-only market data port (§6.4).
 ///
 /// Implemented by runtime application layer over market feeds and history stores.
@@ -295,4 +333,28 @@ pub trait MarketReader: Send + Sync + 'static {
         &self,
         date: Option<DateTime<Utc>>,
     ) -> Result<Vec<InstitutionalFlow>, PortError>;
+
+    /// Delivery-adjusted volume history for an instrument, capped at `limit`.
+    ///
+    /// Upstream state: delivery % is ingested Python-side (`tantra-data` gap 0014 closed)
+    /// but no Rust bridge — `tantra-data/docs/gaps/0019-delivery-rust-bridge.md`.
+    /// Implementors without a bridge must answer `PortError::unavailable` citing that gap.
+    async fn delivery_stats(
+        &self,
+        instrument: &InstrumentId,
+        range: DateRange,
+        limit: Option<usize>,
+    ) -> Result<Vec<DeliveryBar>, PortError>;
+
+    /// Open-interest buildup classification for an instrument over a lookback window.
+    ///
+    /// Upstream state: the OI time-series store + four-quadrant classifier live in
+    /// `tantra-market-store` (`tantra-market/docs/gaps/0002` closed), but the runtime chat
+    /// adapters have no OI store wired — `tantra-runtime/docs/gaps/0007` item 12.
+    /// Implementors without an OI store must answer `PortError::unavailable`.
+    async fn oi_buildup(
+        &self,
+        instrument: &InstrumentId,
+        lookback_days: Option<u32>,
+    ) -> Result<OiBuildupSnapshot, PortError>;
 }

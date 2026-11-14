@@ -4,6 +4,21 @@
 
 ## Phase / Slice Status
 
+- **T6.12 (plan 0010 — Implemented, 2026-11-14)**: Institutional / smart-money detection
+  suite Phases 1–5 landed:
+  - `delivery_analysis` + `oi_buildup` chat tools (catalogue **22 → 24** read-only):
+    `DeliveryBar`/`OiBuildupSnapshot` DTOs + `MarketReader::delivery_stats`/`oi_buildup`
+    port methods, exact `Decimal` throughout; honest `PortError::unavailable` stubs citing
+    the new `tantra-data` gap 0019 (delivery Rust bridge) and `tantra-runtime` gap 0007
+    item 12 (no OI store wired).
+  - Runtime wiring: `FeedMarketReader` stubs + seedable `RuntimeMarketReader`
+    (`set_delivery_stats`/`set_oi_buildup`, filtered/capped reads) + tests.
+  - Composite signal strategy: `tantra_strategies/strategies/composite_signal.py`
+    (`CompositeSignalConfig`, pure `compute_composite_signal` 4-leg + regime gate,
+    `CompositeSignalStrategy` with declarative `Parameter`s) + 14 tests in
+    `tests/strategies/test_composite_signal.py`.
+  - Plan 0010 doc retired to Implemented (git history); remaining real-data wiring tracked
+    by `tantra-data` gaps 0017/0019 + `tantra-market` 0006 + runtime gap 0007 item 13.
 - **T6 track (2026-11-14) — plan 0009 Implemented, gaps 0003–0008 closed, zero open gaps**:
   - T6.1/2: `tantra-agent::memory::user::UserMemory` (per-profile `ProfileBudget` map, recall
     `profile_section`/`recall_section`/`assemble` via `tantra-agent-prompt` renderers) +
@@ -47,7 +62,7 @@
     SSE transport noted shipped).
 - **Plan 0006 (MCP/chat tool catalog expansion) — complete**: Phases 1–4 implemented
   (2026-11-11/12) and recorded in `docs/plans/README.md` Implemented table. Full detail in the
-  README + git history; catalogue is 19 read-only + 2 alert + 3 strategy tools.
+  README + git history; catalogue is 24 read-only + 2 alert + 3 strategy tools.
 - **Plans 0001–0005**: complete and merged — see `docs/plans/README.md` Implemented table.
 
 ## Immediate Next Step
@@ -56,14 +71,15 @@
   needs new `tantra-data` ingestion first: file data gaps before tool code per plan 0007 §3),
   Track 5 (T6.10 safe trade-intent bridge via NoFX approval queue + paper sandbox, strategy
   CRUD, tax — the largest remaining slice).
-- **Plan 0010 (T6.12, Proposed)**: `institutional_flows` shipped with T6.7; add
-  `delivery_analysis` + `oi_buildup` tools (file the delivery / OI-buildup Rust bridge gaps
-  in `tantra-data`/`tantra-market` first) and the composite-signal strategy in
-  `tantra-strategies`.
+- **Plan 0010 (T6.12, Implemented)**: tool surface + composite strategy shipped; close the
+  upstream bridges to turn the stubs real — `tantra-data` 0017 (institutional-flow bridge) +
+  0019 (delivery bridge), `tantra-market` 0006 (L2 depth), and wire
+  `ParquetOpenInterestStore` + `BuildupAnalyzer` into `FeedMarketReader::oi_buildup`
+  (runtime gap 0007 item 13).
 - **R4 architectural-dependency test** (pre-existing): decide whether to drop the
   `tantra-agent-mcp` → `tantra-ledger-allocation` dep or widen R4 to allow mcp.
 - **Filing discipline**: new chat-tool categories need provider-repo gap docs (`tantra-data`
-  next 0019+; `tantra-market` next 0007+) before tool code.
+  next 0020+; `tantra-market` next 0007+) before tool code.
 
 New **plan 0012** (approved design, 2026-11-13): agent-roster culmination — Prism Insight (13,
 github.com/dragon1086/prism-insight) + Fincept (37, github.com/Fincept-Corporation/FinceptTerminal)
@@ -79,7 +95,7 @@ flow tracked by `tantra-ui/docs/plans/0007`.
 - Plan numbering collision fixed: active plans 0008/0009 replace the reused `0002`/`0003`
   numbers (implemented plans 0001–0006 keep theirs). Gap 0002 closed in the index; gap
   numbers are never reused per `.agents/rules/gap-tracking.md`.
-- Chat catalogue: **19 read-only tools** (`test_total_read_only_catalogue_count` pins the count)
+- Chat catalogue: **24 read-only tools** (`test_total_read_only_catalogue_count` pins the count)
   **plus** the 2-tool alert bundle and 3 strategy tools. Content (Phase 3) and
   options-chain/corporate-actions (Phase 4) tools all went into the main all-ReadOnly bundle
   (unlike the LocalWrite alert CRUD, which sits outside so its count-pin invariant stays

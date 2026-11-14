@@ -20,9 +20,9 @@ use tantra_agent_chat_tools::ports::calendar::{
 use tantra_agent_chat_tools::ports::content::{ContentReader, FilingRecord, NewsArticle};
 use tantra_agent_chat_tools::ports::error::PortError;
 use tantra_agent_chat_tools::ports::market::{
-    BlockDeal, CorporateAction, InstitutionalFlow, InstrumentSearchResult, MacroSeries, MarketBar,
-    MarketDepth, MarketDepthLevel, MarketHistory, MarketIndicators, MarketQuote, MarketReader,
-    OptionContract, OptionsChain,
+    BlockDeal, CorporateAction, DeliveryBar, InstitutionalFlow, InstrumentSearchResult,
+    MacroSeries, MarketBar, MarketDepth, MarketDepthLevel, MarketHistory, MarketIndicators,
+    MarketQuote, MarketReader, OiBuildupSnapshot, OptionContract, OptionsChain,
 };
 use tantra_agent_chat_tools::ports::portfolio::{
     AccountSummary, DateRange, OrderFilter, PortfolioReader,
@@ -316,6 +316,59 @@ impl MarketReader for MockMarketReader {
             net_value: Money::inr(dec!(4000.0)),
             trade_date: Utc::now(),
         }])
+    }
+
+    async fn delivery_stats(
+        &self,
+        instrument: &InstrumentId,
+        _range: DateRange,
+        limit: Option<usize>,
+    ) -> Result<Vec<DeliveryBar>, PortError> {
+        if self.fail_quotes {
+            return Err(PortError::unavailable(
+                "delivery % data is Python-side only — see tantra-data/docs/gaps/0019-delivery-rust-bridge.md",
+            ));
+        }
+        let mut bars = vec![
+            DeliveryBar {
+                instrument: instrument.clone(),
+                date: Utc::now() - chrono::Duration::days(2),
+                traded_qty: Quantity(dec!(1000000.0)),
+                delivered_qty: Quantity(dec!(720000.0)),
+                delivery_pct: dec!(72.0),
+            },
+            DeliveryBar {
+                instrument: instrument.clone(),
+                date: Utc::now() - chrono::Duration::days(1),
+                traded_qty: Quantity(dec!(1200000.0)),
+                delivered_qty: Quantity(dec!(900000.0)),
+                delivery_pct: dec!(75.0),
+            },
+        ];
+        if let Some(l) = limit {
+            bars.truncate(l);
+        }
+        Ok(bars)
+    }
+
+    async fn oi_buildup(
+        &self,
+        instrument: &InstrumentId,
+        _lookback_days: Option<u32>,
+    ) -> Result<OiBuildupSnapshot, PortError> {
+        if self.fail_quotes {
+            return Err(PortError::unavailable(
+                "no open-interest store wired in the runtime chat adapters — see tantra-runtime/docs/gaps/0007 item 12",
+            ));
+        }
+        Ok(OiBuildupSnapshot {
+            instrument: instrument.clone(),
+            as_of: Utc::now(),
+            open_interest: Quantity(dec!(1250000.0)),
+            oi_change_pct: Some(dec!(6.5)),
+            price_change_pct: Some(dec!(2.1)),
+            classification: "long_buildup".to_string(),
+        })
     }
 }
 
@@ -1570,7 +1623,7 @@ async fn test_total_read_only_catalogue_count() {
         None,
     );
     let specs = registry.specs();
-    assert_eq!(specs.len(), 22);
+    assert_eq!(specs.len(), 24);
 
     for spec in &specs {
         let tool = registry.get(&spec.name).unwrap();
@@ -1838,6 +1891,172 @@ async fn economic_calendar_tool_filters_and_limits() {
     // deny_unknown_fields rejects unexpected arguments.
     let err = tool
         .execute(serde_json::json!({ "bogus": true }), dummy_tool_context())
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, ToolError::InvalidArguments { .. }),
+        "unknown field must be rejected, got {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn delivery_analysis_tool_returns_delivery_bars() {
+    let market = Arc::new(MockMarketReader { fail_quotes: false });
+    let mut registry = ToolRegistry::new();
+    register_read_only_tools(
+        &mut registry,
+        Arc::new(MockPortfolioReader),
+        market,
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        None,
+    );
+
+    let tool = registry
+        .get("delivery_analysis")
+        .expect("delivery_analysis registered");
+    assert_eq!(tool.spec().name, "delivery_analysis");
+    assert_eq!(tool.traits().risk, ToolRisk::ReadOnly);
+
+    // 1. Success, no filters — both seeded days returned.
+    let out = tool
+        .execute(
+            serde_json::json!({ "instrument": "NSE:RELIANCE" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["count"], 2);
+    let day = &out.payload["delivery"][1];
+    assert_eq!(day["instrument"], "NSE:RELIANCE");
+    assert_eq!(parse_dec(&day["traded_qty"]), 1200000.0);
+    assert_eq!(parse_dec(&day["delivered_qty"]), 900000.0);
+    assert_eq!(parse_dec(&day["delivery_pct"]), 75.0);
+    assert!(day["date"].is_string());
+
+    // 2. limit caps the returned days.
+    let out = tool
+        .execute(
+            serde_json::json!({ "instrument": "NSE:RELIANCE", "limit": 1 }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["count"], 1);
+
+    // 3. Honest unavailability when no Rust bridge exists.
+    let failing = Arc::new(MockMarketReader { fail_quotes: true });
+    let mut fail_registry = ToolRegistry::new();
+    register_read_only_tools(
+        &mut fail_registry,
+        Arc::new(MockPortfolioReader),
+        failing,
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        None,
+    );
+    let err = fail_registry
+        .get("delivery_analysis")
+        .unwrap()
+        .execute(
+            serde_json::json!({ "instrument": "NSE:RELIANCE" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, ToolError::Execution(..)),
+        "unavailable delivery port must surface as ToolError::Execution, got {err:?}"
+    );
+
+    // 4. deny_unknown_fields rejects unexpected arguments.
+    let err = tool
+        .execute(
+            serde_json::json!({ "instrument": "NSE:RELIANCE", "bogus": true }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, ToolError::InvalidArguments { .. }),
+        "unknown field must be rejected, got {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn oi_buildup_tool_returns_classification() {
+    let market = Arc::new(MockMarketReader { fail_quotes: false });
+    let mut registry = ToolRegistry::new();
+    register_read_only_tools(
+        &mut registry,
+        Arc::new(MockPortfolioReader),
+        market,
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        None,
+    );
+
+    let tool = registry.get("oi_buildup").expect("oi_buildup registered");
+    assert_eq!(tool.spec().name, "oi_buildup");
+    assert_eq!(tool.traits().risk, ToolRisk::ReadOnly);
+
+    // 1. Success — default lookback parsed through to the port.
+    let out = tool
+        .execute(
+            serde_json::json!({ "instrument": "NFO:NIFTY26NOV24000CE" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["instrument"], "NFO:NIFTY26NOV24000CE");
+    assert_eq!(parse_dec(&out.payload["open_interest"]), 1250000.0);
+    assert_eq!(parse_dec(&out.payload["oi_change_pct"]), 6.5);
+    assert_eq!(parse_dec(&out.payload["price_change_pct"]), 2.1);
+    assert_eq!(out.payload["classification"], "long_buildup");
+    assert!(out.payload["as_of"].is_string());
+
+    // 2. Honest unavailability when no OI store is wired.
+    let failing = Arc::new(MockMarketReader { fail_quotes: true });
+    let mut fail_registry = ToolRegistry::new();
+    register_read_only_tools(
+        &mut fail_registry,
+        Arc::new(MockPortfolioReader),
+        failing,
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        None,
+    );
+    let err = fail_registry
+        .get("oi_buildup")
+        .unwrap()
+        .execute(
+            serde_json::json!({ "instrument": "NSE:RELIANCE" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, ToolError::Execution(..)),
+        "unavailable OI port must surface as ToolError::Execution, got {err:?}"
+    );
+
+    // 3. deny_unknown_fields rejects unexpected arguments.
+    let err = tool
+        .execute(
+            serde_json::json!({ "instrument": "NSE:RELIANCE", "bogus": true }),
+            dummy_tool_context(),
+        )
         .await
         .unwrap_err();
     assert!(

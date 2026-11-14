@@ -8,8 +8,9 @@ use crate::calendar::EconomicCalendarTool;
 use crate::content::{FilingsSearchTool, NewsSearchTool};
 use crate::lift::{lift_regime, lift_risk, lift_screener};
 use crate::market::{
-    BlockDealsTool, CorporateActionsTool, InstitutionalFlowsTool, MacroSeriesTool, MarketDepthTool,
-    MarketHistoryTool, MarketIndicatorsTool, MarketQuoteTool, MarketSearchTool, OptionsChainTool,
+    BlockDealsTool, CorporateActionsTool, DeliveryAnalysisTool, InstitutionalFlowsTool,
+    MacroSeriesTool, MarketDepthTool, MarketHistoryTool, MarketIndicatorsTool, MarketQuoteTool,
+    MarketSearchTool, OiBuildupTool, OptionsChainTool,
 };
 use crate::portfolio::{
     OrdersViewTool, PnlViewTool, PortfolioViewTool, PositionsViewTool, TaxLotsViewTool,
@@ -21,7 +22,7 @@ use crate::ports::market::MarketReader;
 use crate::ports::portfolio::PortfolioReader;
 use crate::ports::snapshot::SnapshotSource;
 
-/// Bundle of all 22 Phase B read-only conversational tools (§6.5).
+/// Bundle of all 24 Phase B read-only conversational tools (§6.5).
 pub fn create_read_only_tools(
     portfolio: Arc<dyn PortfolioReader>,
     market: Arc<dyn MarketReader>,
@@ -67,10 +68,13 @@ pub fn create_read_only_tools(
         Arc::new(MarketDepthTool::new(Arc::clone(&market))),
         Arc::new(InstitutionalFlowsTool::new(Arc::clone(&market))),
         Arc::new(EconomicCalendarTool::new(calendar)),
+        // 7. Plan 0010 smart-money tools (2)
+        Arc::new(DeliveryAnalysisTool::new(Arc::clone(&market))),
+        Arc::new(OiBuildupTool::new(market)),
     ]
 }
 
-/// Register all 22 Phase B read-only chat tools into a registry (§6.5).
+/// Register all 24 Phase B read-only chat tools into a registry (§6.5).
 pub fn register_read_only_tools(
     registry: &mut ToolRegistry,
     portfolio: Arc<dyn PortfolioReader>,
