@@ -327,8 +327,10 @@ pub trait MarketReader: Send + Sync + 'static {
 
     /// Daily FII/DII institutional net flows for the cash segment.
     ///
-    /// Upstream state: data exists Python-side (`tantra-data` gap 0013 closed) but no Rust
-    /// bridge — `tantra-data/docs/gaps/0017-institutional-flow-rust-bridge.md`.
+    /// Upstream state: the `tantra-data` → Rust bridge exists
+    /// (`InstitutionalFlowsProjectionReader`, `FeedMarketReader::with_institutional_flows` —
+    /// `tantra-data` gap 0017 closed). Implementors without a projection reader wired must
+    /// answer `PortError::unavailable` citing `tantra-runtime/docs/gaps/0007` item 11.
     async fn institutional_flows(
         &self,
         date: Option<DateTime<Utc>>,
@@ -336,9 +338,10 @@ pub trait MarketReader: Send + Sync + 'static {
 
     /// Delivery-adjusted volume history for an instrument, capped at `limit`.
     ///
-    /// Upstream state: delivery % is ingested Python-side (`tantra-data` gap 0014 closed)
-    /// but no Rust bridge — `tantra-data/docs/gaps/0019-delivery-rust-bridge.md`.
-    /// Implementors without a bridge must answer `PortError::unavailable` citing that gap.
+    /// Upstream state: the `tantra-data` → Rust bridge exists
+    /// (`DeliveryProjectionReader`, `FeedMarketReader::with_delivery` — `tantra-data` gap 0019
+    /// closed). Implementors without a projection reader wired must answer
+    /// `PortError::unavailable` citing `tantra-runtime/docs/gaps/0007` item 12.
     async fn delivery_stats(
         &self,
         instrument: &InstrumentId,

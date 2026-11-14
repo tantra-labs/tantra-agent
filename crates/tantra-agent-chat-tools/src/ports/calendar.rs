@@ -47,9 +47,11 @@ pub struct EconomicCalendarQuery {
 /// Read-only macro/economic calendar port (plan 0007 Track 2 Phase 5).
 ///
 /// Implemented by runtime application layers over an economic-calendar source. Upstream
-/// state: the calendar exists Python-side but has no Rust-consumer bridge —
-/// `tantra-data/docs/gaps/0018-economic-calendar-rust-bridge.md`. Implementors without a
-/// bridge must answer `PortError::unavailable` citing that gap — never an empty success.
+/// state: the calendar exists Python-side and the `tantra-data` → Rust bridge is landed
+/// (`EconomicCalendarProjectionReader`, `FeedCalendarReader::with_economic_calendar` —
+/// `tantra-data` gap 0018 closed). Implementors without a projection reader wired must answer
+/// `PortError::unavailable` citing `tantra-runtime/docs/gaps/0007` item 3b — never an empty
+/// success.
 #[async_trait]
 pub trait CalendarReader: Send + Sync + 'static {
     /// Fetch scheduled economic events matching the query.

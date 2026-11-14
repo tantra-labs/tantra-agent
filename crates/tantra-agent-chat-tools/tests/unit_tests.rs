@@ -319,7 +319,7 @@ impl MarketReader for MockMarketReader {
     ) -> Result<Vec<InstitutionalFlow>, PortError> {
         if self.fail_quotes {
             return Err(PortError::unavailable(
-                "FII/DII institutional-flow Rust bridge not wired — see tantra-data/docs/gaps/0017-institutional-flow-rust-bridge.md",
+                "institutional-flow reader not wired; see tantra-runtime/docs/gaps/0007 item 11",
             ));
         }
         Ok(vec![InstitutionalFlow {
@@ -339,7 +339,7 @@ impl MarketReader for MockMarketReader {
     ) -> Result<Vec<DeliveryBar>, PortError> {
         if self.fail_quotes {
             return Err(PortError::unavailable(
-                "delivery % data is Python-side only — see tantra-data/docs/gaps/0019-delivery-rust-bridge.md",
+                "delivery reader not wired; see tantra-runtime/docs/gaps/0007 item 12",
             ));
         }
         let mut bars = vec![
