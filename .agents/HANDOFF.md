@@ -1,14 +1,36 @@
 # HANDOFF — tantra-agent
 
-**Date**: 2026-11-12 · Repo: `tantra-agent` · Branch: `main`
+**Date**: 2026-11-14 · Repo: `tantra-agent` · Branch: `main`
 
 ## Phase / Slice Status
 
-- **Rename to Tantra (plan `tantra-labs` 0004, 2026-11-12)**: workspace renamed to `tantra-*`
-  (crates, paths, docs). **Pre-existing, non-rename failure**: `test_architectural_dependency_rules`
-  (R4) fails — `tantra-agent-mcp` depends on `tantra-ledger-allocation` since commit `28629d0`
-  (plan 0007 Track 1 Phase 2, 2026-11-12); R4 predates it (`ef879be`, 2026-11-06). Decide: drop the
-  dep or widen R4 to allow mcp.
+- **T6 track (2026-11-14) — plan 0009 Implemented, gaps 0003–0008 closed, zero open gaps**:
+  - T6.1/2: `tantra-agent::memory::user::UserMemory` (per-profile `ProfileBudget` map, recall
+    `profile_section`/`recall_section`/`assemble` via `tantra-agent-prompt` renderers) +
+    prompt cache-hit/miss regression tests (`tests/prompt_cache_tests.rs`,
+    `tests/renderer_cache_tests.rs`). Commit `7f9d480`.
+  - T6.4: MCP stdio client `tantra-agent-mcp::client::{McpClient, McpClientError}` +
+    `src/bin/mcp_stdio_server.rs` (process-spawned `tests/client_tests.rs`). Commit `7f9d480`.
+  - T6.11 Ph 15: `_jq` universal response filter via `serde_json_path` (RFC 9535) —
+    `tantra-agent-core::jq::apply_jq_filter` + server-side `apply_jq_to_envelope`
+    (filters the full envelope, writes the first match into `"data"`). Commit `7f9d480`.
+  - T6.5: `tantra-agent-report::notes::{ResearchNote, NoteVerdict}` (Typst/Markdown) +
+    `tantra-agent-research::notes::research_note_from_verification`. Commit `7f9d480`.
+  - T6.9: Track-4 engines in `tantra-agent-analytics` — `regime/hmm` (Baum-Welch + Viterbi,
+    deterministic quantile init), `changepoint` (CUSUM + structural break), `copula`
+    (Clayton/Gumbel, analytic tail dependence, seeded-bootstrap joint VaR), `validation`
+    permutation tests (sign-flip Sharpe + shuffled win rate); `AnalyticsError` gained
+    `InvalidArgument`. 5 MCP gateway tools (`RegimeToolService` +
+    `AllocationToolService::multi_period_optimize` over ledger MPO). Commit `95ec800`.
+    Fixed the stale `test_tool_portfolio_optimize_hrp_unimplemented` → `..._hrp`.
+  - T6.6 (Track 1) verified shipped (`28629d0`). T6.7 Track-2 chat tools —
+    `market_depth`/`institutional_flows` (MarketReader methods) + `economic_calendar`
+    (new `CalendarReader` port), catalogue **19 → 22 read-only**; honest
+    `PortError::unavailable` stubs citing market 0006 / data 0017 / data 0018. Commit `150bcae`.
+- **Rename to Tantra (plan `tantra-labs` 0004, 2026-11-12)**: workspace renamed to `tantra-*`.
+  **Pre-existing, non-rename failure**: `test_architectural_dependency_rules` (R4) fails —
+  `tantra-agent-mcp` depends on `tantra-ledger-allocation`; R4 predates it (`ef879be`,
+  2026-11-06). Decide: drop the dep or widen R4 to allow mcp (the MPO MCP tool keeps the dep).
 
 - **Docs overhaul (2026-11-12)**: the historical `docs/roadmap/` was dismantled into
   `docs/design/`, `docs/gaps/`, `docs/plans/` and the whole set rewritten to match the source.
@@ -30,21 +52,18 @@
 
 ## Immediate Next Step
 
-- **Gap 0001** (inline `#[cfg(test)]` in `ref_store.rs` + `research/verify/mod.rs`) → plan
-  0008; quickest close: move tests to `tests/`, verify `grep -rn "#\[cfg(test)\]"
-  crates/*/src/` is empty, then update `code-guardrails.md`/`code-migration-map.md`.
-- Persistent memory & Phase E work continues under plan 0009 (gaps 0003–0007).
-- Future chat-tool/MCP breadth continues under active plan 0007; open data blockers are the
-  filed upstream gaps — `tantra-market/docs/gaps/0001` (chain reader),
-  `tantra-data/docs/gaps/0008`+`0009` (bridge + ingestion) — alongside the standing
-  `tantra-data` 0005/0006/0007 ingestion/bridge gaps.
-
-New **plan 0010** (proposed, 2026-11-12): institutional/smart-money flow detection suite —
-`institutional_flows`, `delivery_analysis`, `oi_buildup` tools (catalogue would go 19 → 22) plus
-a composite-signal strategy in `tantra-strategies`. Filed two new upstream gaps alongside the
-plan: `tantra-data/docs/gaps/0013` (FII/DII flows), `tantra-data/docs/gaps/0014` (delivery %);
-and `tantra-market/docs/gaps/0002` (OI history/buildup, sequenced after that repo's 0001). No
-tool/port code written yet — plan is scoping-only pending go-ahead.
+- **Plan 0007 remaining tracks (open)**: Track 3 (T6.8 fundamentals / mutual funds / IPO —
+  needs new `tantra-data` ingestion first: file data gaps before tool code per plan 0007 §3),
+  Track 5 (T6.10 safe trade-intent bridge via NoFX approval queue + paper sandbox, strategy
+  CRUD, tax — the largest remaining slice).
+- **Plan 0010 (T6.12, Proposed)**: `institutional_flows` shipped with T6.7; add
+  `delivery_analysis` + `oi_buildup` tools (file the delivery / OI-buildup Rust bridge gaps
+  in `tantra-data`/`tantra-market` first) and the composite-signal strategy in
+  `tantra-strategies`.
+- **R4 architectural-dependency test** (pre-existing): decide whether to drop the
+  `tantra-agent-mcp` → `tantra-ledger-allocation` dep or widen R4 to allow mcp.
+- **Filing discipline**: new chat-tool categories need provider-repo gap docs (`tantra-data`
+  next 0019+; `tantra-market` next 0007+) before tool code.
 
 New **plan 0012** (approved design, 2026-11-13): agent-roster culmination — Prism Insight (13,
 github.com/dragon1086/prism-insight) + Fincept (37, github.com/Fincept-Corporation/FinceptTerminal)
