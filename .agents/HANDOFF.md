@@ -46,6 +46,15 @@ plan: `tantra-data/docs/gaps/0013` (FII/DII flows), `tantra-data/docs/gaps/0014`
 and `tantra-market/docs/gaps/0002` (OI history/buildup, sequenced after that repo's 0001). No
 tool/port code written yet — plan is scoping-only pending go-ahead.
 
+New **plan 0012** (approved design, 2026-11-13): agent-roster culmination — Prism Insight (13,
+github.com/dragon1086/prism-insight) + Fincept (37, github.com/Fincept-Corporation/FinceptTerminal)
+clubbed into a **14-persona desk** (9 existing + 5 new: trading-flow-analyst, industry-analyst,
+information-analyst, investment-strategist, geopolitics-analyst) with 37 folded lenses (6 economic
+schools → macro-strategist, 11 investor mentors → investment-strategist, 20 geopolitics modes →
+geopolitics-analyst). **Docs/design/plan only — no code landed.** Design:
+`docs/design/agent-roster-culmination.md`; plan: `docs/plans/0012-*`. UI wiring + winning-trade
+flow tracked by `tantra-ui/docs/plans/0007`.
+
 ## Decisions & Discoveries
 
 - Plan numbering collision fixed: active plans 0008/0009 replace the reused `0002`/`0003`

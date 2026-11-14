@@ -14,6 +14,7 @@ Per workspace rule `.agents/rules/gap-tracking.md`:
 | [0009](0009-persistent-memory-mcp-client-and-phase-e.md) | Persistent Memory, MCP Client Bridge & Phase E | `tantra-agent-core`, `tantra-agent-prompt`, `tantra-agent-mcp`, `tantra-agent-report`, `tantra-agent-research` | Open — tracks gaps 0003–0007 |
 | [0010](0010-institutional-smart-money-detection-suite.md) | Institutional / Smart-Money Flow Detection Suite | `tantra-agent-chat-tools`, `tantra-runtime-api(-rest)`, `tantra-strategies` | Proposed — composite signal (delivery-adjusted volume, shareholding/insider filings, block deals, OI buildup) over 3 new chat tools; depends on new upstream gaps `tantra-data` 0013/0014 and `tantra-market` 0002 |
 | [0011](0011-elephant-edge-level-map-chat-tools.md) | Elephant Edge Level-Map & OI-Wall Chat Tools | `tantra-agent-chat-tools`, `tantra-runtime-api(-rest)` | Proposed — `level_map` + `oi_walls` ReadOnly tools on `tantra-core` plan 0003 wire types; cites plan 0010; master plan root `docs/plans/0005` |
+| [0012](0012-agent-roster-culmination-prism-fincept.md) | Agent Roster Culmination: Prism Insight (13) + Fincept (37) into the Tantra Persona Desk | `tantra-agent-prompt` (persona.rs), `skills/`, playbook `docs/design/agents/0001-guide.md` | Approved Design & Implementation Roadmap — 14-persona desk (9 existing + 5 new) + lenses (6 economic schools, 11 investor mentors, 20 geopolitics modes); docs/design/plan only, no code landed; UI wiring tracked by `tantra-ui` plan 0007 |
 
 ## Implemented Plans
 
