@@ -7,7 +7,7 @@ use crate::error::McpError;
 use crate::tools::{
     AllocationToolService, AnalyticsToolService, BacktestDispatcherService,
     DecisionExplainorService, DerivativesToolService, ForecastService, IndicatorCatalogService,
-    MetricsCalculatorService, SpecValidatorService, StrategyOptimizerService,
+    MetricsCalculatorService, RegimeToolService, SpecValidatorService, StrategyOptimizerService,
     VolatilityToolService, list_tool_definitions,
 };
 use tantra_agent_core::{
@@ -103,6 +103,7 @@ pub struct McpServer {
     pub allocation: AllocationToolService,
     pub derivatives: DerivativesToolService,
     pub volatility: VolatilityToolService,
+    pub regime: RegimeToolService,
     /// Ephemeral data reference store (`$tantra/ref/<uuid>`) for chaining
     /// large time-series between tools without token roundtrips.
     pub data_store: DataReferenceStore,
@@ -129,6 +130,7 @@ impl McpServer {
             allocation: AllocationToolService::new(),
             derivatives: DerivativesToolService::new(),
             volatility: VolatilityToolService::new(),
+            regime: RegimeToolService::new(),
             data_store: DataReferenceStore::new(),
         }
     }
@@ -314,6 +316,13 @@ impl McpServer {
             "tantra_walk_forward" => return self.analytics.walk_forward(&arguments),
             "tantra_factor_attribution" => return self.analytics.factor_attribution(&arguments),
             "tantra_portfolio_optimize" => return self.allocation.optimize(&arguments),
+            "tantra_multi_period_optimize" => {
+                return self.allocation.multi_period_optimize(&arguments);
+            }
+            "tantra_detect_regimes" => return self.regime.detect_regimes(&arguments),
+            "tantra_change_point" => return self.regime.change_point(&arguments),
+            "tantra_copula_tail_risk" => return self.regime.copula_tail_risk(&arguments),
+            "tantra_permutation_test" => return self.regime.permutation_test(&arguments),
             "tantra_price_derivatives" => return self.derivatives.price_derivatives(&arguments),
             "tantra_garch_volatility" => return self.volatility.garch_volatility(&arguments),
             "tantra_search_tools" => {

@@ -1202,7 +1202,7 @@ async fn test_tool_portfolio_optimize_weight_bounds() {
 }
 
 #[tokio::test]
-async fn test_tool_portfolio_optimize_hrp_unimplemented() {
+async fn test_tool_portfolio_optimize_hrp() {
     let server = McpServer::new();
     let msg = RpcMessage::Request {
         id: json!(304),
@@ -1221,12 +1221,28 @@ async fn test_tool_portfolio_optimize_hrp_unimplemented() {
     };
 
     let resp = server.handle_message(&msg).await.expect("response");
-    if let RpcMessage::Response { error, .. } = resp {
-        assert!(error.is_some(), "expected error for hrp");
-        let err = error.unwrap();
-        assert!(err.message.contains("not implemented") || err.message.contains("Phase 2"));
+    if let RpcMessage::Response { result, error, .. } = resp {
+        assert!(error.is_none(), "unexpected error: {:?}", error);
+        let res = result.unwrap();
+        let structured = &res["structuredContent"];
+        assert_eq!(structured["schema"], "tantra/result/v1");
+        assert_eq!(structured["status"], "ok");
+        let data = &structured["data"];
+        assert_eq!(data["objective"], "hrp");
+        let weights = data["weights"].as_array().expect("weights array");
+        assert_eq!(weights.len(), 2);
+        let mut total = 0.0f64;
+        for w in weights {
+            let value: f64 = w["weight"].as_str().unwrap().parse().unwrap();
+            assert!(value > 0.0, "HRP weights must be positive");
+            total += value;
+        }
+        assert!(
+            (total - 1.0).abs() < 1e-4,
+            "weights must sum to 1, got {total}"
+        );
     } else {
-        panic!("expected error response for unimplemented hrp");
+        panic!("unexpected response type");
     }
 }
 

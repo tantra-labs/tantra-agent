@@ -29,4 +29,8 @@ pub enum AnalyticsError {
     /// Two trades had incompatible instruments or sides.
     #[error("trade mismatch: {0}")]
     TradeMismatch(String),
+
+    /// An argument was invalid (e.g. an unsupported state count).
+    #[error("invalid argument: {0}")]
+    InvalidArgument(String),
 }

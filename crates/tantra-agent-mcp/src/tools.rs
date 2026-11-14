@@ -12,9 +12,11 @@ use std::collections::{BTreeMap, HashMap};
 use std::time::Duration;
 
 use tantra_agent_analytics::{
-    FactorReturnPanel, PortfolioHolding, compute_factor_attribution, evaluate_walk_forward,
-    factor_attribution_blocks, fit_cross_sectional_factor_model, fit_garch11, simulate_bootstrap,
-    test_engle_granger,
+    ChangePointConfig, CopulaConfig, CopulaFamily, FactorReturnPanel, HmmConfig,
+    PermutationTestConfig, PortfolioHolding, compute_factor_attribution,
+    detect_cusum_change_points, evaluate_walk_forward, factor_attribution_blocks,
+    fit_bivariate_copula, fit_cross_sectional_factor_model, fit_garch11, fit_gaussian_hmm,
+    permutation_test_sharpe, simulate_bootstrap, test_engle_granger,
 };
 pub use tantra_agent_analytics::{GarchConfig, GarchResult};
 
@@ -30,7 +32,9 @@ use tantra_agent_core::indicators::{
 use tantra_agent_core::{DisplayBlock, MetricItem, TantraResultEnvelope};
 use tantra_agent_forecast::{ForecastConfig, ForecastModel, fit_and_forecast};
 use tantra_core::{Exchange, InstrumentId, OptionType, Price, QuantSeries};
-use tantra_ledger_allocation::{AllocationError, AllocationObjective, Constraint, PortfolioState};
+use tantra_ledger_allocation::{
+    AllocationError, AllocationObjective, Constraint, MpoConfig, PortfolioState,
+};
 use tantra_market_pricing::{BlackScholesModel, PriceParams, PricingModel};
 use tantra_risk::RiskEngine;
 
@@ -459,6 +463,219 @@ pub fn list_tool_definitions() -> Vec<serde_json::Value> {
                     }
                 },
                 "required": ["covariance_matrix"]
+            }
+        }),
+        json!({
+            "name": "tantra_multi_period_optimize",
+            "category": "allocation",
+            "description": "Sequences a rebalance toward the optimal target over multiple periods under transaction costs and a per-period turnover cap",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "expected_returns": {
+                        "type": "array",
+                        "items": { "type": "number" },
+                        "description": "Expected annualized returns per asset (length N, required for mean_variance)"
+                    },
+                    "covariance_matrix": {
+                        "type": "array",
+                        "items": {
+                            "type": "array",
+                            "items": { "type": "number" }
+                        },
+                        "description": "N x N covariance matrix of asset returns"
+                    },
+                    "objective": {
+                        "type": "string",
+                        "enum": ["mean_variance", "risk_parity", "hrp"],
+                        "default": "risk_parity",
+                        "description": "Portfolio optimization objective: mean_variance, risk_parity, or hrp"
+                    },
+                    "periods": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 3,
+                        "description": "Number of rebalancing periods T"
+                    },
+                    "transaction_cost": {
+                        "type": "number",
+                        "default": 0.001,
+                        "description": "Quadratic transaction-cost coefficient: cost = tc * turnover^2"
+                    },
+                    "turnover_penalty": {
+                        "type": "number",
+                        "default": 0.0001,
+                        "description": "Linear penalty per unit of L1 turnover"
+                    },
+                    "max_turnover_per_period": {
+                        "type": "number",
+                        "description": "Optional cap on L1 turnover per period"
+                    },
+                    "symbols": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Optional asset symbols. Defaults to ASSET_0, ASSET_1, ..."
+                    },
+                    "weight_bounds": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "instrument": { "type": "string" },
+                                "min": { "type": "number" },
+                                "max": { "type": "number" }
+                            }
+                        },
+                        "description": "Optional per-asset min/max weight bounds"
+                    },
+                    "_jq": {
+                        "type": "string",
+                        "description": "JSONPath filter applied to the response payload before serialization"
+                    }
+                },
+                "required": ["covariance_matrix"]
+            }
+        }),
+        json!({
+            "name": "tantra_detect_regimes",
+            "category": "regimes",
+            "description": "Fits a Gaussian hidden Markov model to a return series (Baum-Welch + Viterbi) and labels each observation bullish / bearish / choppy_volatile",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "returns": {
+                        "type": "array",
+                        "items": { "type": "number" },
+                        "description": "Return series in chronological order"
+                    },
+                    "n_states": {
+                        "type": "integer",
+                        "enum": [2, 3],
+                        "default": 2,
+                        "description": "Number of hidden regimes (2 or 3)"
+                    },
+                    "max_iterations": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 100,
+                        "description": "Maximum Baum-Welch EM iterations"
+                    },
+                    "_jq": {
+                        "type": "string",
+                        "description": "JSONPath filter applied to the response payload before serialization"
+                    }
+                },
+                "required": ["returns"]
+            }
+        }),
+        json!({
+            "name": "tantra_change_point",
+            "category": "analytics",
+            "description": "Detects structural breaks in a series with a two-sided CUSUM scan, reporting break indices and the maximal CUSUM statistic",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "series": {
+                        "type": "array",
+                        "items": { "type": "number" },
+                        "description": "Time series to scan (prices or returns)"
+                    },
+                    "min_observations": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 10,
+                        "description": "Minimum series length required to run the scan"
+                    },
+                    "threshold_multiplier": {
+                        "type": "number",
+                        "default": 3.0,
+                        "description": "Break threshold in units of sqrt(n)"
+                    },
+                    "min_segment": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 5,
+                        "description": "Minimum distance between recorded breaks and from either end"
+                    },
+                    "_jq": {
+                        "type": "string",
+                        "description": "JSONPath filter applied to the response payload before serialization"
+                    }
+                },
+                "required": ["series"]
+            }
+        }),
+        json!({
+            "name": "tantra_copula_tail_risk",
+            "category": "analytics",
+            "description": "Fits a bivariate Clayton or Gumbel copula to a return pair, reporting Kendall tau, analytic tail dependence, and a bootstrap joint VaR95",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "series_x": {
+                        "type": "array",
+                        "items": { "type": "number" },
+                        "description": "First return series"
+                    },
+                    "series_y": {
+                        "type": "array",
+                        "items": { "type": "number" },
+                        "description": "Second return series"
+                    },
+                    "family": {
+                        "type": "string",
+                        "enum": ["clayton", "gumbel"],
+                        "default": "clayton",
+                        "description": "Copula family to fit"
+                    },
+                    "n_simulations": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 5000,
+                        "description": "Bootstrap draws for the joint VaR estimate"
+                    },
+                    "seed": {
+                        "type": "integer",
+                        "default": 42,
+                        "description": "Deterministic bootstrap seed"
+                    },
+                    "_jq": {
+                        "type": "string",
+                        "description": "JSONPath filter applied to the response payload before serialization"
+                    }
+                },
+                "required": ["series_x", "series_y"]
+            }
+        }),
+        json!({
+            "name": "tantra_permutation_test",
+            "category": "analytics",
+            "description": "Permutation test on the Sharpe ratio: flips return signs under a seeded RNG and reports the p-value against the observed statistic",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "returns": {
+                        "type": "array",
+                        "items": { "type": "number" },
+                        "description": "Return series in chronological order"
+                    },
+                    "n_permutations": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "default": 1000,
+                        "description": "Number of permutations to evaluate"
+                    },
+                    "seed": {
+                        "type": "integer",
+                        "default": 42,
+                        "description": "Deterministic permutation seed"
+                    },
+                    "_jq": {
+                        "type": "string",
+                        "description": "JSONPath filter applied to the response payload before serialization"
+                    }
+                },
+                "required": ["returns"]
             }
         }),
         json!({
@@ -1930,6 +2147,267 @@ impl AnalyticsToolService {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Regime, change-point, copula, and permutation-test engines (Track 4)
+// ---------------------------------------------------------------------------
+
+/// Regime, change-point, copula, and permutation-test engines (plan 0007
+/// Track 4 Phases 9-10).
+#[derive(Clone, Debug, Default)]
+pub struct RegimeToolService;
+
+impl RegimeToolService {
+    /// Creates a new regime tool service.
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Fits a Gaussian HMM to a return series and labels each observation's
+    /// regime (bullish / bearish / choppy_volatile).
+    pub fn detect_regimes(&self, args: &serde_json::Value) -> Result<serde_json::Value, McpError> {
+        let returns_val = args
+            .get("returns")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| McpError::InvalidArguments("missing returns array".to_string()))?;
+        let returns: Vec<f64> = returns_val.iter().filter_map(|v| v.as_f64()).collect();
+        let n_states = args.get("n_states").and_then(|v| v.as_u64()).unwrap_or(2) as usize;
+        let max_iterations = args
+            .get("max_iterations")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(100) as usize;
+        let config = HmmConfig {
+            n_states,
+            max_iterations,
+            ..Default::default()
+        };
+        let result = fit_gaussian_hmm(&returns, &config)
+            .map_err(|e| McpError::InvalidArguments(format!("HMM fit failed: {e}")))?;
+        let n_states = result.n_states;
+        let observations = returns.len();
+        let log_likelihood = result.log_likelihood;
+        let converged = result.converged;
+
+        let summary = format!(
+            "Gaussian HMM ({n} states, {m} observations): log-likelihood {ll:.2}, converged {c}",
+            n = n_states,
+            m = observations,
+            ll = log_likelihood,
+            c = converged
+        );
+        let envelope =
+            TantraResultEnvelope::ok(summary, result).with_block(DisplayBlock::MetricGrid {
+                items: vec![
+                    MetricItem {
+                        label: "n_states".to_string(),
+                        value: n_states.to_string(),
+                    },
+                    MetricItem {
+                        label: "observations".to_string(),
+                        value: observations.to_string(),
+                    },
+                    MetricItem {
+                        label: "log_likelihood".to_string(),
+                        value: format!("{log_likelihood:.4}"),
+                    },
+                    MetricItem {
+                        label: "converged".to_string(),
+                        value: converged.to_string(),
+                    },
+                ],
+            });
+
+        serde_json::to_value(envelope).map_err(McpError::Json)
+    }
+
+    /// Scans a series for structural breaks with a two-sided CUSUM statistic.
+    pub fn change_point(&self, args: &serde_json::Value) -> Result<serde_json::Value, McpError> {
+        let series_val = args
+            .get("series")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| McpError::InvalidArguments("missing series array".to_string()))?;
+        let series: Vec<f64> = series_val.iter().filter_map(|v| v.as_f64()).collect();
+        let min_observations = args
+            .get("min_observations")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(10) as usize;
+        let threshold_multiplier = args
+            .get("threshold_multiplier")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(3.0);
+        let min_segment = args
+            .get("min_segment")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(5) as usize;
+        let config = ChangePointConfig {
+            min_observations,
+            threshold_multiplier,
+            min_segment,
+        };
+        let result = detect_cusum_change_points(&series, &config).map_err(|e| {
+            McpError::InvalidArguments(format!("change-point detection failed: {e}"))
+        })?;
+        let detected = result.detected;
+        let cusum_max = result.cusum_max;
+        let break_count = result.break_points.len();
+
+        let summary = format!(
+            "CUSUM change-point scan: {break_count} break(s) detected, max |S| = {cusum_max:.4}"
+        );
+        let envelope =
+            TantraResultEnvelope::ok(summary, result).with_block(DisplayBlock::MetricGrid {
+                items: vec![
+                    MetricItem {
+                        label: "detected".to_string(),
+                        value: detected.to_string(),
+                    },
+                    MetricItem {
+                        label: "cusum_max".to_string(),
+                        value: format!("{cusum_max:.4}"),
+                    },
+                    MetricItem {
+                        label: "break_count".to_string(),
+                        value: break_count.to_string(),
+                    },
+                ],
+            });
+
+        serde_json::to_value(envelope).map_err(McpError::Json)
+    }
+
+    /// Fits a bivariate copula and reports tail dependence plus joint VaR95.
+    pub fn copula_tail_risk(
+        &self,
+        args: &serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
+        let x_val = args
+            .get("series_x")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| McpError::InvalidArguments("missing series_x array".to_string()))?;
+        let y_val = args
+            .get("series_y")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| McpError::InvalidArguments("missing series_y array".to_string()))?;
+        let x: Vec<f64> = x_val.iter().filter_map(|v| v.as_f64()).collect();
+        let y: Vec<f64> = y_val.iter().filter_map(|v| v.as_f64()).collect();
+        let family_str = args
+            .get("family")
+            .and_then(|v| v.as_str())
+            .unwrap_or("clayton");
+        let family = match family_str.to_lowercase().as_str() {
+            "clayton" => CopulaFamily::Clayton,
+            "gumbel" => CopulaFamily::Gumbel,
+            other => {
+                return Err(McpError::InvalidArguments(format!(
+                    "unknown copula family '{other}': expected 'clayton' or 'gumbel'"
+                )));
+            }
+        };
+        let n_simulations = args
+            .get("n_simulations")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(5000) as usize;
+        let seed = args.get("seed").and_then(|v| v.as_u64()).unwrap_or(42);
+        let config = CopulaConfig {
+            family,
+            n_simulations,
+            seed,
+        };
+        let result = fit_bivariate_copula(&x, &y, &config)
+            .map_err(|e| McpError::InvalidArguments(format!("copula fit failed: {e}")))?;
+        let family = result.family.clone();
+        let theta = result.theta;
+        let kendall_tau = result.kendall_tau;
+        let tail_dependence_upper = result.tail_dependence_upper;
+        let tail_dependence_lower = result.tail_dependence_lower;
+        let joint_var_95 = result.joint_var_95;
+
+        let summary = format!(
+            "{family} copula fit: theta={theta:.4}, tau={kendall_tau:.4}, joint VaR95={joint_var_95:.4}"
+        );
+        let envelope =
+            TantraResultEnvelope::ok(summary, result).with_block(DisplayBlock::MetricGrid {
+                items: vec![
+                    MetricItem {
+                        label: "theta".to_string(),
+                        value: format!("{theta:.4}"),
+                    },
+                    MetricItem {
+                        label: "kendall_tau".to_string(),
+                        value: format!("{kendall_tau:.4}"),
+                    },
+                    MetricItem {
+                        label: "tail_dependence_upper".to_string(),
+                        value: format!("{tail_dependence_upper:.4}"),
+                    },
+                    MetricItem {
+                        label: "tail_dependence_lower".to_string(),
+                        value: format!("{tail_dependence_lower:.4}"),
+                    },
+                    MetricItem {
+                        label: "joint_var_95".to_string(),
+                        value: format!("{joint_var_95:.4}"),
+                    },
+                ],
+            });
+
+        serde_json::to_value(envelope).map_err(McpError::Json)
+    }
+
+    /// Runs a permutation test on the Sharpe ratio of a return series.
+    pub fn permutation_test(
+        &self,
+        args: &serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
+        let returns_val = args
+            .get("returns")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| McpError::InvalidArguments("missing returns array".to_string()))?;
+        let returns: Vec<f64> = returns_val.iter().filter_map(|v| v.as_f64()).collect();
+        let n_permutations = args
+            .get("n_permutations")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(1000) as usize;
+        let seed = args.get("seed").and_then(|v| v.as_u64()).unwrap_or(42);
+        let config = PermutationTestConfig {
+            n_permutations,
+            seed,
+        };
+        let result = permutation_test_sharpe(&returns, &config)
+            .map_err(|e| McpError::InvalidArguments(format!("permutation test failed: {e}")))?;
+        let observed_stat = result.observed_stat;
+        let p_value = result.p_value;
+        let n_permutations = result.n_permutations;
+        let significant = result.significant;
+
+        let summary = format!(
+            "Sharpe permutation test: observed={observed_stat:.4}, p={p_value:.4}, significant={significant}"
+        );
+        let envelope =
+            TantraResultEnvelope::ok(summary, result).with_block(DisplayBlock::MetricGrid {
+                items: vec![
+                    MetricItem {
+                        label: "observed_stat".to_string(),
+                        value: format!("{observed_stat:.4}"),
+                    },
+                    MetricItem {
+                        label: "p_value".to_string(),
+                        value: format!("{p_value:.4}"),
+                    },
+                    MetricItem {
+                        label: "n_permutations".to_string(),
+                        value: n_permutations.to_string(),
+                    },
+                    MetricItem {
+                        label: "significant".to_string(),
+                        value: significant.to_string(),
+                    },
+                ],
+            });
+
+        serde_json::to_value(envelope).map_err(McpError::Json)
+    }
+}
+
 /// One asset weight result in the allocation output.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssetWeightResult {
@@ -1953,6 +2431,41 @@ pub struct PortfolioOptimizationResult {
     pub target_return: Option<Decimal>,
 }
 
+/// One target weight in a multi-period rebalancing step.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MpoWeightResult {
+    /// Instrument symbol.
+    pub instrument: String,
+    /// Target weight as an exact decimal.
+    pub weight: Decimal,
+}
+
+/// One rebalancing step of the multi-period sequence.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MpoStepResult {
+    /// Zero-based period index.
+    pub period: usize,
+    /// Target weights after this period's rebalance (sum to 1).
+    pub target_weights: Vec<MpoWeightResult>,
+    /// L1 turnover of this rebalance.
+    pub turnover: Decimal,
+    /// Friction cost of this rebalance.
+    pub transaction_cost_incurred: Decimal,
+}
+
+/// Multi-period optimization output payload (plan 0007 Track 4 Phase 11).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MpoOptimizationResult {
+    /// The optimization objective used.
+    pub objective: String,
+    /// One step per period, in order.
+    pub steps: Vec<MpoStepResult>,
+    /// Sum of every step's friction cost.
+    pub total_transaction_cost: Decimal,
+    /// Sum of every step's L1 turnover.
+    pub total_turnover: Decimal,
+}
+
 /// Portfolio allocation and optimization service (Plan 0007 Track 1 Phase 2).
 pub struct AllocationToolService;
 
@@ -1969,178 +2482,19 @@ impl AllocationToolService {
 
     /// Solves portfolio allocation using pure Decimal arithmetic via `tantra-ledger-allocation`.
     pub fn optimize(&self, args: &serde_json::Value) -> Result<serde_json::Value, McpError> {
-        let cov_val = args
-            .get("covariance_matrix")
-            .and_then(|v| v.as_array())
-            .ok_or_else(|| {
-                McpError::InvalidArguments("missing covariance_matrix array".to_string())
-            })?;
-
-        let n = cov_val.len();
-        if n == 0 {
-            return Err(McpError::InvalidArguments(
-                "empty covariance_matrix".to_string(),
-            ));
-        }
-
-        let mut covariance = Vec::with_capacity(n);
-        for (row_idx, row_val) in cov_val.iter().enumerate() {
-            let row_arr = row_val.as_array().ok_or_else(|| {
-                McpError::InvalidArguments(format!(
-                    "covariance_matrix row {row_idx} is not an array"
-                ))
-            })?;
-            if row_arr.len() != n {
-                return Err(McpError::InvalidArguments(format!(
-                    "covariance_matrix is not square: row {row_idx} has length {}, expected {n}",
-                    row_arr.len()
-                )));
-            }
-            let mut row = Vec::with_capacity(n);
-            for (col_idx, item) in row_arr.iter().enumerate() {
-                let dec = parse_decimal(item).ok_or_else(|| {
-                    McpError::InvalidArguments(format!(
-                        "invalid number in covariance_matrix at [{row_idx}][{col_idx}]"
-                    ))
-                })?;
-                row.push(dec);
-            }
-            covariance.push(row);
-        }
-
-        let symbols: Vec<String> =
-            if let Some(syms) = args.get("symbols").and_then(|v| v.as_array()) {
-                if syms.len() != n {
-                    return Err(McpError::InvalidArguments(format!(
-                        "symbols length ({}) does not match covariance matrix dimensions ({n})",
-                        syms.len()
-                    )));
-                }
-                syms.iter()
-                    .enumerate()
-                    .map(|(i, s)| {
-                        s.as_str()
-                            .map(|s| s.to_string())
-                            .unwrap_or_else(|| format!("ASSET_{i}"))
-                    })
-                    .collect()
-            } else {
-                (0..n).map(|i| format!("ASSET_{i}")).collect()
-            };
-
-        let expected_returns: Option<Vec<Decimal>> = if let Some(ret_arr) =
-            args.get("expected_returns").and_then(|v| v.as_array())
-        {
-            if ret_arr.len() != n {
-                return Err(McpError::InvalidArguments(format!(
-                    "expected_returns length ({}) does not match covariance matrix dimensions ({n})",
-                    ret_arr.len()
-                )));
-            }
-            let mut rets = Vec::with_capacity(n);
-            for (idx, item) in ret_arr.iter().enumerate() {
-                let dec = parse_decimal(item).ok_or_else(|| {
-                    McpError::InvalidArguments(format!(
-                        "invalid number in expected_returns at index {idx}"
-                    ))
-                })?;
-                rets.push(dec);
-            }
-            Some(rets)
-        } else {
-            None
-        };
-
-        let objective_str = args
-            .get("objective")
-            .and_then(|v| v.as_str())
-            .unwrap_or("mean_variance");
-
-        let risk_free_rate = args
-            .get("risk_free_rate")
-            .and_then(parse_decimal)
-            .unwrap_or(Decimal::ZERO);
-
+        let AllocationInput {
+            objective_str,
+            objective,
+            risk_free_rate,
+            instruments,
+            expected_returns,
+            covariance,
+            constraints,
+            state,
+            ..
+        } = parse_allocation_input(args, "mean_variance")?;
+        let n = instruments.len();
         let target_return = args.get("target_return").and_then(parse_decimal);
-
-        let objective = match objective_str {
-            "mean_variance" => {
-                if expected_returns.is_none() {
-                    return Err(McpError::InvalidArguments(
-                        "mean_variance objective requires expected_returns array".to_string(),
-                    ));
-                }
-                AllocationObjective::MeanVariance { risk_free_rate }
-            }
-            "risk_parity" => AllocationObjective::RiskParity,
-            "hrp" => AllocationObjective::Hrp,
-            other => {
-                return Err(McpError::InvalidArguments(format!(
-                    "unknown objective '{other}': expected 'mean_variance', 'risk_parity', or 'hrp'"
-                )));
-            }
-        };
-
-        let instruments: Vec<InstrumentId> = symbols
-            .iter()
-            .map(|s| InstrumentId::new(Exchange::Nse, s.clone()))
-            .collect();
-
-        let mut exp_returns_map = BTreeMap::new();
-        if let Some(ref rets) = expected_returns {
-            for (inst, &ret) in instruments.iter().zip(rets) {
-                exp_returns_map.insert(inst.clone(), ret);
-            }
-        }
-
-        let mut cov_map = BTreeMap::new();
-        for (i, inst_row) in instruments.iter().enumerate() {
-            let mut row_map = BTreeMap::new();
-            for (j, inst_col) in instruments.iter().enumerate() {
-                row_map.insert(inst_col.clone(), covariance[i][j]);
-            }
-            cov_map.insert(inst_row.clone(), row_map);
-        }
-
-        let state = PortfolioState {
-            as_of: Utc::now(),
-            instruments: instruments.clone(),
-            current_weights: BTreeMap::new(),
-            expected_returns: exp_returns_map,
-            covariance: cov_map,
-        };
-
-        let mut constraints = Vec::new();
-        if let Some(bounds_arr) = args.get("weight_bounds").and_then(|v| v.as_array()) {
-            for (idx, b) in bounds_arr.iter().enumerate() {
-                let inst = if let Some(sym) = b.get("instrument").and_then(|v| v.as_str()) {
-                    instruments
-                        .iter()
-                        .find(|id| id.symbol.eq_ignore_ascii_case(sym))
-                        .cloned()
-                        .ok_or_else(|| {
-                            McpError::InvalidArguments(format!(
-                                "weight bound references unknown symbol '{sym}'"
-                            ))
-                        })?
-                } else if idx < instruments.len() {
-                    instruments[idx].clone()
-                } else {
-                    continue;
-                };
-
-                let min = b
-                    .get("min")
-                    .and_then(parse_decimal)
-                    .unwrap_or(Decimal::ZERO);
-                let max = b.get("max").and_then(parse_decimal).unwrap_or(Decimal::ONE);
-                constraints.push(Constraint::WeightBounds {
-                    instrument: inst,
-                    min,
-                    max,
-                });
-            }
-        }
 
         let target = tantra_ledger_allocation::optimize(objective, &constraints, &state).map_err(
             |e| match e {
@@ -2305,6 +2659,341 @@ impl AllocationToolService {
 
         serde_json::to_value(envelope).map_err(McpError::Json)
     }
+
+    /// Sequences a rebalance toward the optimal target over multiple periods
+    /// under transaction costs and an optional per-period turnover cap.
+    pub fn multi_period_optimize(
+        &self,
+        args: &serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
+        let AllocationInput {
+            objective_str,
+            objective,
+            constraints,
+            state,
+            ..
+        } = parse_allocation_input(args, "risk_parity")?;
+
+        let periods = args.get("periods").and_then(|v| v.as_u64()).unwrap_or(3) as usize;
+        if periods < 1 {
+            return Err(McpError::InvalidArguments(
+                "periods must be at least 1".to_string(),
+            ));
+        }
+        let transaction_cost = args
+            .get("transaction_cost")
+            .and_then(parse_decimal)
+            .unwrap_or(Decimal::new(1, 3));
+        let turnover_penalty = args
+            .get("turnover_penalty")
+            .and_then(parse_decimal)
+            .unwrap_or(Decimal::new(1, 4));
+        let max_turnover_per_period = args.get("max_turnover_per_period").and_then(parse_decimal);
+
+        let config = MpoConfig {
+            periods,
+            transaction_cost,
+            turnover_penalty,
+            max_turnover_per_period,
+            ..Default::default()
+        };
+
+        let result = tantra_ledger_allocation::multi_period_optimize(
+            objective,
+            &constraints,
+            &state,
+            &config,
+        )
+        .map_err(|e| match e {
+            AllocationError::InvalidArgument(msg) => McpError::InvalidArguments(msg),
+            AllocationError::InfeasibleConstraints(msg) => {
+                McpError::InvalidArguments(format!("infeasible constraints: {msg}"))
+            }
+            AllocationError::NotImplemented(msg) => {
+                McpError::Internal(format!("objective not implemented: {msg}"))
+            }
+            AllocationError::SingularCovariance => McpError::Internal(
+                "covariance matrix is singular or not positive-definite".to_string(),
+            ),
+            AllocationError::InsufficientHistory { needed, got } => McpError::InvalidArguments(
+                format!("insufficient history: needed {needed}, got {got}"),
+            ),
+        })?;
+
+        let steps: Vec<MpoStepResult> = result
+            .steps
+            .iter()
+            .map(|step| MpoStepResult {
+                period: step.period,
+                target_weights: step
+                    .target_weights
+                    .iter()
+                    .map(|(inst, &w)| MpoWeightResult {
+                        instrument: inst.symbol.clone(),
+                        weight: w,
+                    })
+                    .collect(),
+                turnover: step.turnover,
+                transaction_cost_incurred: step.transaction_cost_incurred,
+            })
+            .collect();
+
+        let payload = MpoOptimizationResult {
+            objective: objective_str,
+            total_transaction_cost: result.total_transaction_cost,
+            total_turnover: result.total_turnover,
+            steps,
+        };
+
+        let step_count = payload.steps.len();
+        let total_transaction_cost = payload.total_transaction_cost;
+        let total_turnover = payload.total_turnover;
+
+        let summary = format!(
+            "Multi-period optimization ({}): {} period(s), total cost {}, total turnover {}",
+            payload.objective, step_count, total_transaction_cost, total_turnover
+        );
+
+        let table_rows: Vec<Vec<String>> = payload
+            .steps
+            .iter()
+            .map(|s| {
+                vec![
+                    format!("T+{}", s.period + 1),
+                    format!("{:.4}", s.turnover),
+                    format!("{:.6}", s.transaction_cost_incurred),
+                ]
+            })
+            .collect();
+
+        let envelope = TantraResultEnvelope::ok(summary, payload)
+            .with_block(DisplayBlock::MetricGrid {
+                items: vec![
+                    MetricItem {
+                        label: "periods".to_string(),
+                        value: step_count.to_string(),
+                    },
+                    MetricItem {
+                        label: "total_transaction_cost".to_string(),
+                        value: format!("{total_transaction_cost:.6}"),
+                    },
+                    MetricItem {
+                        label: "total_turnover".to_string(),
+                        value: format!("{total_turnover:.4}"),
+                    },
+                ],
+            })
+            .with_block(DisplayBlock::Table {
+                title: "Multi-Period Rebalance Steps".to_string(),
+                columns: vec![
+                    "Period".to_string(),
+                    "Turnover".to_string(),
+                    "Friction Cost".to_string(),
+                ],
+                rows: table_rows,
+            });
+
+        serde_json::to_value(envelope).map_err(McpError::Json)
+    }
+}
+
+/// Parsed and validated allocation input shared by the single- and
+/// multi-period optimization tools.
+struct AllocationInput {
+    objective_str: String,
+    objective: AllocationObjective,
+    risk_free_rate: Decimal,
+    instruments: Vec<InstrumentId>,
+    expected_returns: Option<Vec<Decimal>>,
+    covariance: Vec<Vec<Decimal>>,
+    constraints: Vec<Constraint>,
+    state: PortfolioState,
+}
+
+/// Parses and validates the shared allocation tool arguments (covariance
+/// matrix, symbols, expected returns, objective, risk-free rate, and weight
+/// bounds) into an [`AllocationInput`]. `default_objective` is used when the
+/// caller does not supply an explicit `objective`.
+fn parse_allocation_input(
+    args: &serde_json::Value,
+    default_objective: &str,
+) -> Result<AllocationInput, McpError> {
+    let cov_val = args
+        .get("covariance_matrix")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| McpError::InvalidArguments("missing covariance_matrix array".to_string()))?;
+
+    let n = cov_val.len();
+    if n == 0 {
+        return Err(McpError::InvalidArguments(
+            "empty covariance_matrix".to_string(),
+        ));
+    }
+
+    let mut covariance = Vec::with_capacity(n);
+    for (row_idx, row_val) in cov_val.iter().enumerate() {
+        let row_arr = row_val.as_array().ok_or_else(|| {
+            McpError::InvalidArguments(format!("covariance_matrix row {row_idx} is not an array"))
+        })?;
+        if row_arr.len() != n {
+            return Err(McpError::InvalidArguments(format!(
+                "covariance_matrix is not square: row {row_idx} has length {}, expected {n}",
+                row_arr.len()
+            )));
+        }
+        let mut row = Vec::with_capacity(n);
+        for (col_idx, item) in row_arr.iter().enumerate() {
+            let dec = parse_decimal(item).ok_or_else(|| {
+                McpError::InvalidArguments(format!(
+                    "invalid number in covariance_matrix at [{row_idx}][{col_idx}]"
+                ))
+            })?;
+            row.push(dec);
+        }
+        covariance.push(row);
+    }
+
+    let symbols: Vec<String> = if let Some(syms) = args.get("symbols").and_then(|v| v.as_array()) {
+        if syms.len() != n {
+            return Err(McpError::InvalidArguments(format!(
+                "symbols length ({}) does not match covariance matrix dimensions ({n})",
+                syms.len()
+            )));
+        }
+        syms.iter()
+            .enumerate()
+            .map(|(i, s)| {
+                s.as_str()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| format!("ASSET_{i}"))
+            })
+            .collect()
+    } else {
+        (0..n).map(|i| format!("ASSET_{i}")).collect()
+    };
+
+    let expected_returns: Option<Vec<Decimal>> = if let Some(ret_arr) =
+        args.get("expected_returns").and_then(|v| v.as_array())
+    {
+        if ret_arr.len() != n {
+            return Err(McpError::InvalidArguments(format!(
+                "expected_returns length ({}) does not match covariance matrix dimensions ({n})",
+                ret_arr.len()
+            )));
+        }
+        let mut rets = Vec::with_capacity(n);
+        for (idx, item) in ret_arr.iter().enumerate() {
+            let dec = parse_decimal(item).ok_or_else(|| {
+                McpError::InvalidArguments(format!(
+                    "invalid number in expected_returns at index {idx}"
+                ))
+            })?;
+            rets.push(dec);
+        }
+        Some(rets)
+    } else {
+        None
+    };
+
+    let objective_str = args
+        .get("objective")
+        .and_then(|v| v.as_str())
+        .unwrap_or(default_objective);
+
+    let risk_free_rate = args
+        .get("risk_free_rate")
+        .and_then(parse_decimal)
+        .unwrap_or(Decimal::ZERO);
+
+    let objective = match objective_str {
+        "mean_variance" => {
+            if expected_returns.is_none() {
+                return Err(McpError::InvalidArguments(
+                    "mean_variance objective requires expected_returns array".to_string(),
+                ));
+            }
+            AllocationObjective::MeanVariance { risk_free_rate }
+        }
+        "risk_parity" => AllocationObjective::RiskParity,
+        "hrp" => AllocationObjective::Hrp,
+        other => {
+            return Err(McpError::InvalidArguments(format!(
+                "unknown objective '{other}': expected 'mean_variance', 'risk_parity', or 'hrp'"
+            )));
+        }
+    };
+
+    let instruments: Vec<InstrumentId> = symbols
+        .iter()
+        .map(|s| InstrumentId::new(Exchange::Nse, s.clone()))
+        .collect();
+
+    let mut exp_returns_map = BTreeMap::new();
+    if let Some(ref rets) = expected_returns {
+        for (inst, &ret) in instruments.iter().zip(rets) {
+            exp_returns_map.insert(inst.clone(), ret);
+        }
+    }
+
+    let mut cov_map = BTreeMap::new();
+    for (i, inst_row) in instruments.iter().enumerate() {
+        let mut row_map = BTreeMap::new();
+        for (j, inst_col) in instruments.iter().enumerate() {
+            row_map.insert(inst_col.clone(), covariance[i][j]);
+        }
+        cov_map.insert(inst_row.clone(), row_map);
+    }
+
+    let state = PortfolioState {
+        as_of: Utc::now(),
+        instruments: instruments.clone(),
+        current_weights: BTreeMap::new(),
+        expected_returns: exp_returns_map,
+        covariance: cov_map,
+    };
+
+    let mut constraints = Vec::new();
+    if let Some(bounds_arr) = args.get("weight_bounds").and_then(|v| v.as_array()) {
+        for (idx, b) in bounds_arr.iter().enumerate() {
+            let inst = if let Some(sym) = b.get("instrument").and_then(|v| v.as_str()) {
+                instruments
+                    .iter()
+                    .find(|id| id.symbol.eq_ignore_ascii_case(sym))
+                    .cloned()
+                    .ok_or_else(|| {
+                        McpError::InvalidArguments(format!(
+                            "weight bound references unknown symbol '{sym}'"
+                        ))
+                    })?
+            } else if idx < instruments.len() {
+                instruments[idx].clone()
+            } else {
+                continue;
+            };
+
+            let min = b
+                .get("min")
+                .and_then(parse_decimal)
+                .unwrap_or(Decimal::ZERO);
+            let max = b.get("max").and_then(parse_decimal).unwrap_or(Decimal::ONE);
+            constraints.push(Constraint::WeightBounds {
+                instrument: inst,
+                min,
+                max,
+            });
+        }
+    }
+
+    Ok(AllocationInput {
+        objective_str: objective_str.to_string(),
+        objective,
+        risk_free_rate,
+        instruments,
+        expected_returns,
+        covariance,
+        constraints,
+        state,
+    })
 }
 
 fn decimal_sqrt(d: Decimal) -> Option<Decimal> {
