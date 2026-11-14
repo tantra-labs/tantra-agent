@@ -166,6 +166,45 @@ pub struct CorporateAction {
     pub ratio_to: Option<Quantity>,
 }
 
+/// One level of the order-book depth ladder (plan 0007 Track 2 Phase 4).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MarketDepthLevel {
+    /// Price of this book level.
+    pub price: Price,
+    /// Quantity resting at this level.
+    pub quantity: Quantity,
+}
+
+/// Level-2 order-book depth snapshot with liquidity imbalance (plan 0007 Track 2 Phase 4).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MarketDepth {
+    /// Instrument the depth belongs to.
+    pub instrument: InstrumentId,
+    /// Snapshot timestamp.
+    pub as_of: DateTime<Utc>,
+    /// Bid levels, best first (highest price first).
+    pub bids: Vec<MarketDepthLevel>,
+    /// Ask levels, best first (lowest price first).
+    pub asks: Vec<MarketDepthLevel>,
+    /// Liquidity imbalance percent = (bid_qty - ask_qty)/(bid_qty + ask_qty) * 100.
+    pub liquidity_imbalance_pct: Decimal,
+}
+
+/// One day's FII or DII net flow for the cash segment (plan 0007 Track 2 Phase 4).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct InstitutionalFlow {
+    /// "fii" or "dii".
+    pub category: String,
+    /// Gross buy value for the day.
+    pub buy_value: Money,
+    /// Gross sell value for the day.
+    pub sell_value: Money,
+    /// Net (buy minus sell) value for the day.
+    pub net_value: Money,
+    /// Trade date the flow belongs to.
+    pub trade_date: DateTime<Utc>,
+}
+
 /// Read-only market data port (§6.4).
 ///
 /// Implemented by runtime application layer over market feeds and history stores.
@@ -237,4 +276,23 @@ pub trait MarketReader: Send + Sync + 'static {
         action_type: Option<&str>,
         limit: Option<usize>,
     ) -> Result<Vec<CorporateAction>, PortError>;
+
+    /// Level-2 order-book depth (best `levels` bid/ask levels, default 5).
+    ///
+    /// Upstream state: no L2 depth source — `tantra-market/docs/gaps/0006-l2-order-book-depth.md`.
+    /// Implementors without a depth source must answer `PortError::unavailable` citing that gap.
+    async fn market_depth(
+        &self,
+        instrument: &InstrumentId,
+        levels: Option<usize>,
+    ) -> Result<MarketDepth, PortError>;
+
+    /// Daily FII/DII institutional net flows for the cash segment.
+    ///
+    /// Upstream state: data exists Python-side (`tantra-data` gap 0013 closed) but no Rust
+    /// bridge — `tantra-data/docs/gaps/0017-institutional-flow-rust-bridge.md`.
+    async fn institutional_flows(
+        &self,
+        date: Option<DateTime<Utc>>,
+    ) -> Result<Vec<InstitutionalFlow>, PortError>;
 }

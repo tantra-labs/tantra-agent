@@ -13,6 +13,7 @@
 
 pub mod alert;
 pub mod calc;
+pub mod calendar;
 pub mod catalog;
 pub mod content;
 pub mod lift;
@@ -27,27 +28,30 @@ pub use calc::{
     CagrArgs, CalcOperation, MarketSegment, PositionSizingArgs, ResearchCalcInput,
     ResearchCalcTool, ReturnMetricsArgs, StatutoryCostsArgs, TradeSide,
 };
+pub use calendar::{EconomicCalendarInput, EconomicCalendarTool};
 pub use catalog::{
     create_alert_tools, create_read_only_tools, register_alert_tools, register_read_only_tools,
 };
 pub use content::{FilingsSearchInput, FilingsSearchTool, NewsSearchInput, NewsSearchTool};
 pub use lift::{PureToolAdapter, lift_regime, lift_risk, lift_screener};
 pub use market::{
-    BlockDealsInput, BlockDealsTool, CorporateActionsInput, CorporateActionsTool, MacroSeriesInput,
-    MacroSeriesTool, MarketHistoryInput, MarketHistoryTool, MarketIndicatorsInput,
-    MarketIndicatorsTool, MarketQuoteInput, MarketQuoteTool, MarketSearchInput, MarketSearchTool,
-    OptionsChainInput, OptionsChainTool, parse_instrument,
+    BlockDealsInput, BlockDealsTool, CorporateActionsInput, CorporateActionsTool,
+    InstitutionalFlowsInput, InstitutionalFlowsTool, MacroSeriesInput, MacroSeriesTool,
+    MarketDepthInput, MarketDepthTool, MarketHistoryInput, MarketHistoryTool,
+    MarketIndicatorsInput, MarketIndicatorsTool, MarketQuoteInput, MarketQuoteTool,
+    MarketSearchInput, MarketSearchTool, OptionsChainInput, OptionsChainTool, parse_instrument,
 };
 pub use portfolio::{
     OrdersViewInput, OrdersViewTool, PnlViewInput, PnlViewTool, PortfolioViewInput,
     PortfolioViewTool, PositionsViewInput, PositionsViewTool, TaxLotsViewInput, TaxLotsViewTool,
 };
 pub use ports::{
-    AccountSummary, AlertReader, AlertStatus, AlertWriter, BlockDeal, ContentReader,
-    CorporateAction, DateRange, FilingRecord, InstrumentSearchResult, MacroSeries, MarketBar,
-    MarketHistory, MarketIndicators, MarketQuote, MarketReader, NewsArticle, OptionContract,
-    OptionsChain, OrderFilter, PortError, PortErrorKind, PortfolioReader, PriceAlert, SnapshotData,
-    SnapshotNeeds, SnapshotSource,
+    AccountSummary, AlertReader, AlertStatus, AlertWriter, BlockDeal, CalendarReader,
+    ContentReader, CorporateAction, DateRange, EconomicCalendarQuery, EconomicEvent, FilingRecord,
+    InstitutionalFlow, InstrumentSearchResult, MacroSeries, MarketBar, MarketDepth,
+    MarketDepthLevel, MarketHistory, MarketIndicators, MarketQuote, MarketReader, NewsArticle,
+    OptionContract, OptionsChain, OrderFilter, PortError, PortErrorKind, PortfolioReader,
+    PriceAlert, SnapshotData, SnapshotNeeds, SnapshotSource,
 };
 pub mod strategy;
 

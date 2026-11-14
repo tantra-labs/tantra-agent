@@ -14,11 +14,15 @@ use tantra_agent_chat_tools::calc::{
 };
 use tantra_agent_chat_tools::catalog::register_read_only_tools;
 use tantra_agent_chat_tools::ports::alert::{AlertReader, AlertStatus, AlertWriter, PriceAlert};
+use tantra_agent_chat_tools::ports::calendar::{
+    CalendarReader, EconomicCalendarQuery, EconomicEvent,
+};
 use tantra_agent_chat_tools::ports::content::{ContentReader, FilingRecord, NewsArticle};
 use tantra_agent_chat_tools::ports::error::PortError;
 use tantra_agent_chat_tools::ports::market::{
-    BlockDeal, CorporateAction, InstrumentSearchResult, MacroSeries, MarketBar, MarketHistory,
-    MarketIndicators, MarketQuote, MarketReader, OptionContract, OptionsChain,
+    BlockDeal, CorporateAction, InstitutionalFlow, InstrumentSearchResult, MacroSeries, MarketBar,
+    MarketDepth, MarketDepthLevel, MarketHistory, MarketIndicators, MarketQuote, MarketReader,
+    OptionContract, OptionsChain,
 };
 use tantra_agent_chat_tools::ports::portfolio::{
     AccountSummary, DateRange, OrderFilter, PortfolioReader,
@@ -254,6 +258,65 @@ impl MarketReader for MockMarketReader {
         }
         Ok(actions)
     }
+
+    async fn market_depth(
+        &self,
+        instrument: &InstrumentId,
+        _levels: Option<usize>,
+    ) -> Result<MarketDepth, PortError> {
+        if self.fail_quotes {
+            return Err(PortError::unavailable(
+                "L2 order-book depth source not wired — see tantra-market/docs/gaps/0006-l2-order-book-depth.md",
+            ));
+        }
+        let bid_total = Quantity(dec!(1200.0));
+        let ask_total = Quantity(dec!(800.0));
+        Ok(MarketDepth {
+            instrument: instrument.clone(),
+            as_of: Utc::now(),
+            bids: vec![
+                MarketDepthLevel {
+                    price: Price(dec!(2499.0)),
+                    quantity: Quantity(dec!(700.0)),
+                },
+                MarketDepthLevel {
+                    price: Price(dec!(2498.0)),
+                    quantity: Quantity(dec!(500.0)),
+                },
+            ],
+            asks: vec![
+                MarketDepthLevel {
+                    price: Price(dec!(2501.0)),
+                    quantity: Quantity(dec!(500.0)),
+                },
+                MarketDepthLevel {
+                    price: Price(dec!(2502.0)),
+                    quantity: Quantity(dec!(300.0)),
+                },
+            ],
+            // (1200 - 800) / (1200 + 800) * 100 = 20.
+            liquidity_imbalance_pct: (bid_total.0 - ask_total.0) / (bid_total.0 + ask_total.0)
+                * dec!(100.0),
+        })
+    }
+
+    async fn institutional_flows(
+        &self,
+        _date: Option<DateTime<Utc>>,
+    ) -> Result<Vec<InstitutionalFlow>, PortError> {
+        if self.fail_quotes {
+            return Err(PortError::unavailable(
+                "FII/DII institutional-flow Rust bridge not wired — see tantra-data/docs/gaps/0017-institutional-flow-rust-bridge.md",
+            ));
+        }
+        Ok(vec![InstitutionalFlow {
+            category: "fii".to_string(),
+            buy_value: Money::inr(dec!(12000.0)),
+            sell_value: Money::inr(dec!(8000.0)),
+            net_value: Money::inr(dec!(4000.0)),
+            trade_date: Utc::now(),
+        }])
+    }
 }
 
 struct MockContentReader {
@@ -317,6 +380,52 @@ impl ContentReader for MockContentReader {
             .filter(|f| filing_type.is_none_or(|t| f.filing_type == t))
             .collect();
         Ok(filings)
+    }
+}
+
+struct MockCalendarReader;
+
+#[async_trait]
+impl CalendarReader for MockCalendarReader {
+    async fn economic_calendar(
+        &self,
+        query: &EconomicCalendarQuery,
+    ) -> Result<Vec<EconomicEvent>, PortError> {
+        let events = vec![
+            EconomicEvent {
+                id: "ec_001".to_string(),
+                country: "IN".to_string(),
+                title: "RBI Repo Rate Decision".to_string(),
+                currency: Some("INR".to_string()),
+                impact: "high".to_string(),
+                forecast: Some("6.50%".to_string()),
+                previous: Some("6.50%".to_string()),
+                actual: Some("6.25%".to_string()),
+                event_date: Utc::now() - chrono::Duration::days(2),
+            },
+            EconomicEvent {
+                id: "ec_002".to_string(),
+                country: "US".to_string(),
+                title: "US CPI YoY".to_string(),
+                currency: Some("USD".to_string()),
+                impact: "medium".to_string(),
+                forecast: Some("3.1%".to_string()),
+                previous: Some("3.2%".to_string()),
+                actual: None,
+                event_date: Utc::now() + chrono::Duration::days(3),
+            },
+        ];
+        let mut hits: Vec<EconomicEvent> = events
+            .into_iter()
+            .filter(|e| query.country.as_deref().is_none_or(|c| e.country == c))
+            .filter(|e| query.impact.as_deref().is_none_or(|i| e.impact == i))
+            .filter(|e| query.start.is_none_or(|s| e.event_date >= s))
+            .filter(|e| query.end.is_none_or(|end| e.event_date < end))
+            .collect();
+        if let Some(limit) = query.limit {
+            hits.truncate(limit);
+        }
+        Ok(hits)
     }
 }
 
@@ -636,6 +745,7 @@ async fn test_market_tools() {
         Arc::new(MockContentReader {
             fail_content: false,
         }),
+        Arc::new(MockCalendarReader),
         Some(snapshot),
     );
 
@@ -718,6 +828,7 @@ async fn test_block_deals_tools() {
         Arc::new(MockContentReader {
             fail_content: false,
         }),
+        Arc::new(MockCalendarReader),
         None,
     );
 
@@ -761,6 +872,7 @@ async fn test_block_deals_tools() {
         Arc::new(MockContentReader {
             fail_content: false,
         }),
+        Arc::new(MockCalendarReader),
         None,
     );
     let err = fail_registry
@@ -786,6 +898,7 @@ async fn test_content_tools() {
         Arc::new(MockPortfolioReader),
         Arc::new(MockMarketReader { fail_quotes: false }),
         content,
+        Arc::new(MockCalendarReader),
         None,
     );
 
@@ -888,6 +1001,7 @@ async fn test_content_tools() {
         Arc::new(MockPortfolioReader),
         Arc::new(MockMarketReader { fail_quotes: false }),
         failing,
+        Arc::new(MockCalendarReader),
         None,
     );
     for name in ["news_search", "filings_search"] {
@@ -927,6 +1041,7 @@ async fn test_options_and_corporate_actions_tools() {
         Arc::new(MockContentReader {
             fail_content: false,
         }),
+        Arc::new(MockCalendarReader),
         None,
     );
 
@@ -1045,6 +1160,7 @@ async fn test_options_and_corporate_actions_tools() {
         Arc::new(MockContentReader {
             fail_content: false,
         }),
+        Arc::new(MockCalendarReader),
         None,
     );
     for (name, input) in [
@@ -1251,7 +1367,14 @@ async fn test_portfolio_tools() {
     });
     let mut registry = ToolRegistry::new();
 
-    register_read_only_tools(&mut registry, portfolio, market, content, None);
+    register_read_only_tools(
+        &mut registry,
+        portfolio,
+        market,
+        content,
+        Arc::new(MockCalendarReader),
+        None,
+    );
 
     // 1. portfolio_view
     let pv_tool = registry
@@ -1345,7 +1468,14 @@ async fn test_portfolio_graceful_degradation_without_quotes() {
     let content = Arc::new(MockContentReader {
         fail_content: false,
     });
-    register_read_only_tools(&mut registry, portfolio, market, content, None);
+    register_read_only_tools(
+        &mut registry,
+        portfolio,
+        market,
+        content,
+        Arc::new(MockCalendarReader),
+        None,
+    );
 
     let pv_tool = registry.get("portfolio_view").unwrap();
     let out = pv_tool
@@ -1378,6 +1508,7 @@ async fn test_lifted_pure_tools() {
         Arc::new(MockContentReader {
             fail_content: false,
         }),
+        Arc::new(MockCalendarReader),
         Some(snapshot),
     );
 
@@ -1430,9 +1561,16 @@ async fn test_total_read_only_catalogue_count() {
     });
     let mut registry = ToolRegistry::new();
 
-    register_read_only_tools(&mut registry, portfolio, market, content, None);
+    register_read_only_tools(
+        &mut registry,
+        portfolio,
+        market,
+        content,
+        Arc::new(MockCalendarReader),
+        None,
+    );
     let specs = registry.specs();
-    assert_eq!(specs.len(), 19);
+    assert_eq!(specs.len(), 22);
 
     for spec in &specs {
         let tool = registry.get(&spec.name).unwrap();
@@ -1535,4 +1673,175 @@ async fn test_strategy_chat_tools_execution() {
 
     let bundle = create_strategy_tools(None);
     assert_eq!(bundle.len(), 3);
+}
+
+#[tokio::test]
+async fn market_depth_tool_returns_ladder() {
+    let market = Arc::new(MockMarketReader { fail_quotes: false });
+    let mut registry = ToolRegistry::new();
+    register_read_only_tools(
+        &mut registry,
+        Arc::new(MockPortfolioReader),
+        market,
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        None,
+    );
+
+    let tool = registry
+        .get("market_depth")
+        .expect("market_depth registered");
+    assert_eq!(tool.spec().name, "market_depth");
+    assert_eq!(tool.traits().risk, ToolRisk::ReadOnly);
+
+    let out = tool
+        .execute(
+            serde_json::json!({ "instrument": "NSE:RELIANCE", "levels": 2 }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["instrument"], "NSE:RELIANCE");
+    let bids = out.payload["bids"].as_array().unwrap();
+    let asks = out.payload["asks"].as_array().unwrap();
+    assert_eq!(bids.len(), 2, "best 2 bid levels returned");
+    assert_eq!(asks.len(), 2, "best 2 ask levels returned");
+    assert_eq!(parse_dec(&bids[0]["price"]), 2499.0);
+    assert_eq!(parse_dec(&bids[0]["quantity"]), 700.0);
+    assert_eq!(parse_dec(&asks[0]["price"]), 2501.0);
+    // bid_total 1200, ask_total 800; imbalance (1200-800)/(1200+800)*100 = 20.
+    assert_eq!(parse_dec(&out.payload["liquidity_imbalance_pct"]), 20.0);
+    assert_eq!(parse_dec(&out.payload["bid_total"]), 1200.0);
+    assert_eq!(parse_dec(&out.payload["ask_total"]), 800.0);
+    assert!(out.payload["as_of"].is_string());
+
+    // Honest unavailability when no depth source exists (same pattern as the other
+    // market tools with `fail_quotes`).
+    let failing = Arc::new(MockMarketReader { fail_quotes: true });
+    let mut fail_registry = ToolRegistry::new();
+    register_read_only_tools(
+        &mut fail_registry,
+        Arc::new(MockPortfolioReader),
+        failing,
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        None,
+    );
+    let err = fail_registry
+        .get("market_depth")
+        .unwrap()
+        .execute(
+            serde_json::json!({ "instrument": "NSE:RELIANCE" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, ToolError::Execution(..)),
+        "unavailable depth port must surface as ToolError::Execution, got {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn institutional_flows_tool_returns_flows() {
+    let market = Arc::new(MockMarketReader { fail_quotes: false });
+    let mut registry = ToolRegistry::new();
+    register_read_only_tools(
+        &mut registry,
+        Arc::new(MockPortfolioReader),
+        market,
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        None,
+    );
+
+    let tool = registry
+        .get("institutional_flows")
+        .expect("institutional_flows registered");
+    assert_eq!(tool.spec().name, "institutional_flows");
+    assert_eq!(tool.traits().risk, ToolRisk::ReadOnly);
+
+    let out = tool
+        .execute(serde_json::json!({}), dummy_tool_context())
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["count"], 1);
+    let flow = &out.payload["flows"][0];
+    assert_eq!(flow["category"], "fii");
+    assert_eq!(parse_dec(&flow["buy_value"]), 12000.0);
+    assert_eq!(parse_dec(&flow["sell_value"]), 8000.0);
+    assert_eq!(parse_dec(&flow["net_value"]), 4000.0);
+    assert!(flow["trade_date"].is_string());
+}
+
+#[tokio::test]
+async fn economic_calendar_tool_filters_and_limits() {
+    let market = Arc::new(MockMarketReader { fail_quotes: false });
+    let mut registry = ToolRegistry::new();
+    register_read_only_tools(
+        &mut registry,
+        Arc::new(MockPortfolioReader),
+        market,
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        None,
+    );
+
+    let tool = registry
+        .get("economic_calendar")
+        .expect("economic_calendar registered");
+    assert_eq!(tool.spec().name, "economic_calendar");
+    assert_eq!(tool.traits().risk, ToolRisk::ReadOnly);
+
+    // No filters → both fixture events.
+    let out = tool
+        .execute(serde_json::json!({}), dummy_tool_context())
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["count"], 2);
+    assert_eq!(out.payload["events"][0]["id"], "ec_001");
+    assert_eq!(out.payload["events"][0]["title"], "RBI Repo Rate Decision");
+    assert_eq!(out.payload["events"][0]["impact"], "high");
+
+    // Country + impact filters parsed through to the port.
+    let out = tool
+        .execute(
+            serde_json::json!({ "country": "US", "impact": "medium" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["count"], 1);
+    assert_eq!(out.payload["events"][0]["country"], "US");
+    assert_eq!(out.payload["events"][0]["currency"], "USD");
+
+    // Limit caps the returned events.
+    let out = tool
+        .execute(serde_json::json!({ "limit": 1 }), dummy_tool_context())
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["count"], 1);
+
+    // deny_unknown_fields rejects unexpected arguments.
+    let err = tool
+        .execute(serde_json::json!({ "bogus": true }), dummy_tool_context())
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, ToolError::InvalidArguments { .. }),
+        "unknown field must be rejected, got {err:?}"
+    );
 }

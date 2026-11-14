@@ -4,26 +4,29 @@ use tantra_agent_tools::{RegimeCheckTool, RiskInspectionTool, ScreenerQueryTool}
 
 use crate::alert::{PriceAlertListTool, PriceAlertTool};
 use crate::calc::ResearchCalcTool;
+use crate::calendar::EconomicCalendarTool;
 use crate::content::{FilingsSearchTool, NewsSearchTool};
 use crate::lift::{lift_regime, lift_risk, lift_screener};
 use crate::market::{
-    BlockDealsTool, CorporateActionsTool, MacroSeriesTool, MarketHistoryTool, MarketIndicatorsTool,
-    MarketQuoteTool, MarketSearchTool, OptionsChainTool,
+    BlockDealsTool, CorporateActionsTool, InstitutionalFlowsTool, MacroSeriesTool, MarketDepthTool,
+    MarketHistoryTool, MarketIndicatorsTool, MarketQuoteTool, MarketSearchTool, OptionsChainTool,
 };
 use crate::portfolio::{
     OrdersViewTool, PnlViewTool, PortfolioViewTool, PositionsViewTool, TaxLotsViewTool,
 };
 use crate::ports::alert::{AlertReader, AlertWriter};
+use crate::ports::calendar::CalendarReader;
 use crate::ports::content::ContentReader;
 use crate::ports::market::MarketReader;
 use crate::ports::portfolio::PortfolioReader;
 use crate::ports::snapshot::SnapshotSource;
 
-/// Bundle of all 19 Phase B read-only conversational tools (§6.5).
+/// Bundle of all 22 Phase B read-only conversational tools (§6.5).
 pub fn create_read_only_tools(
     portfolio: Arc<dyn PortfolioReader>,
     market: Arc<dyn MarketReader>,
     content: Arc<dyn ContentReader>,
+    calendar: Arc<dyn CalendarReader>,
     snapshots: Option<Arc<dyn SnapshotSource>>,
 ) -> Vec<Arc<dyn ChatTool>> {
     vec![
@@ -60,18 +63,23 @@ pub fn create_read_only_tools(
         // 5. News & filings content tools (2, plan 0006 Phase 3)
         Arc::new(NewsSearchTool::new(Arc::clone(&content))),
         Arc::new(FilingsSearchTool::new(content)),
+        // 6. Plan 0007 Track 2 Phase 4-5 tools (3)
+        Arc::new(MarketDepthTool::new(Arc::clone(&market))),
+        Arc::new(InstitutionalFlowsTool::new(Arc::clone(&market))),
+        Arc::new(EconomicCalendarTool::new(calendar)),
     ]
 }
 
-/// Register all 19 Phase B read-only chat tools into a registry (§6.5).
+/// Register all 22 Phase B read-only chat tools into a registry (§6.5).
 pub fn register_read_only_tools(
     registry: &mut ToolRegistry,
     portfolio: Arc<dyn PortfolioReader>,
     market: Arc<dyn MarketReader>,
     content: Arc<dyn ContentReader>,
+    calendar: Arc<dyn CalendarReader>,
     snapshots: Option<Arc<dyn SnapshotSource>>,
 ) {
-    let tools = create_read_only_tools(portfolio, market, content, snapshots);
+    let tools = create_read_only_tools(portfolio, market, content, calendar, snapshots);
     registry.register_all(tools);
 }
 

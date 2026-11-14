@@ -4,6 +4,7 @@
 //! traits and cannot access mutators or execution systems.
 
 pub mod alert;
+pub mod calendar;
 pub mod content;
 pub mod error;
 pub mod market;
@@ -11,11 +12,13 @@ pub mod portfolio;
 pub mod snapshot;
 
 pub use alert::{AlertReader, AlertStatus, AlertWriter, PriceAlert};
+pub use calendar::{CalendarReader, EconomicCalendarQuery, EconomicEvent};
 pub use content::{ContentReader, FilingRecord, NewsArticle};
 pub use error::{PortError, PortErrorKind};
 pub use market::{
-    BlockDeal, CorporateAction, InstrumentSearchResult, MacroSeries, MarketBar, MarketHistory,
-    MarketIndicators, MarketQuote, MarketReader, OptionContract, OptionsChain,
+    BlockDeal, CorporateAction, InstitutionalFlow, InstrumentSearchResult, MacroSeries, MarketBar,
+    MarketDepth, MarketDepthLevel, MarketHistory, MarketIndicators, MarketQuote, MarketReader,
+    OptionContract, OptionsChain,
 };
 pub use portfolio::{AccountSummary, DateRange, OrderFilter, PortfolioReader};
 pub use snapshot::{SnapshotData, SnapshotNeeds, SnapshotSource};

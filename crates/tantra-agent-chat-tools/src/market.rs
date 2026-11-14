@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
@@ -798,6 +799,214 @@ impl ChatTool for CorporateActionsTool {
             serde_json::json!({
                 "actions": actions_json,
                 "count": actions_json.len(),
+            }),
+        ))
+    }
+}
+
+// ——————————————————————————————————————————————————————————————————————————
+// 9. market_depth
+// ——————————————————————————————————————————————————————————————————————————
+
+/// Maximum number of order-book levels returned per depth call (token budget cap, §6.5).
+pub const MAX_DEPTH_LEVELS: usize = 5;
+
+/// Default number of levels when the caller passes no limit (§6.5).
+pub const DEFAULT_DEPTH_LEVELS: usize = 5;
+
+/// Input arguments for `market_depth`.
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MarketDepthInput {
+    /// Instrument symbol (e.g. "NSE:RELIANCE", "NFO:NIFTY26NOV24000CE").
+    pub instrument: String,
+    /// Number of best bid/ask levels to return (default 5, capped at 5).
+    pub levels: Option<usize>,
+}
+
+/// Chat tool fetching the Level-2 order-book depth ladder for an instrument
+/// (plan 0007 Track 2 Phase 4).
+pub struct MarketDepthTool {
+    reader: Arc<dyn MarketReader>,
+    spec: ToolSpec,
+}
+
+impl MarketDepthTool {
+    /// Create new market depth tool.
+    pub fn new(reader: Arc<dyn MarketReader>) -> Self {
+        let schema = schemars::schema_for!(MarketDepthInput);
+        let spec = ToolSpec::new(
+            "market_depth",
+            "Fetch the Level-2 order-book depth ladder (best bid/ask levels) and liquidity imbalance for an instrument.",
+            serde_json::to_value(schema).unwrap_or_default(),
+        );
+        Self { reader, spec }
+    }
+}
+
+#[async_trait]
+impl ChatTool for MarketDepthTool {
+    fn spec(&self) -> &ToolSpec {
+        &self.spec
+    }
+
+    fn traits(&self) -> ToolTraits {
+        ToolTraits::new(ToolRisk::ReadOnly)
+    }
+
+    fn plan(&self, input: &Value, _ctx: &PlanContext<'_>) -> Result<ToolPlan, ToolError> {
+        let inst = input
+            .get("instrument")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        Ok(ToolPlan::new(format!(
+            "Fetch Level-2 order-book depth for `{inst}`"
+        )))
+    }
+
+    async fn execute(&self, input: Value, _ctx: ToolContext) -> Result<ToolOutput, ToolError> {
+        let args: MarketDepthInput =
+            serde_json::from_value(input).map_err(|e| ToolError::InvalidArguments {
+                tool: "market_depth".to_string(),
+                message: format!("schema validation failure: {e}"),
+            })?;
+
+        let inst = parse_instrument(&args.instrument)?;
+        let capped = args
+            .levels
+            .unwrap_or(DEFAULT_DEPTH_LEVELS)
+            .min(MAX_DEPTH_LEVELS);
+        let depth = self
+            .reader
+            .market_depth(&inst, Some(capped))
+            .await
+            .map_err(|e| e.into_tool_error("market_depth"))?;
+
+        let bid_total: Decimal = depth
+            .bids
+            .iter()
+            .fold(Decimal::ZERO, |acc, l| acc + l.quantity.0);
+        let ask_total: Decimal = depth
+            .asks
+            .iter()
+            .fold(Decimal::ZERO, |acc, l| acc + l.quantity.0);
+
+        let bids_json: Vec<Value> = depth
+            .bids
+            .into_iter()
+            .map(|l| {
+                serde_json::json!({
+                    "price": l.price.0,
+                    "quantity": l.quantity.0,
+                })
+            })
+            .collect();
+        let asks_json: Vec<Value> = depth
+            .asks
+            .into_iter()
+            .map(|l| {
+                serde_json::json!({
+                    "price": l.price.0,
+                    "quantity": l.quantity.0,
+                })
+            })
+            .collect();
+
+        Ok(ToolOutput::ok(
+            "market_depth",
+            serde_json::json!({
+                "instrument": depth.instrument.to_string(),
+                "as_of": depth.as_of,
+                "bids": bids_json,
+                "asks": asks_json,
+                "liquidity_imbalance_pct": depth.liquidity_imbalance_pct,
+                "bid_total": bid_total,
+                "ask_total": ask_total,
+            }),
+        ))
+    }
+}
+
+// ——————————————————————————————————————————————————————————————————————————
+// 10. institutional_flows
+// ——————————————————————————————————————————————————————————————————————————
+
+/// Input arguments for `institutional_flows`.
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct InstitutionalFlowsInput {
+    /// Trade date filter (RFC3339, e.g. "2026-11-10T00:00:00Z"). Omit for the latest day.
+    pub date: Option<String>,
+}
+
+/// Chat tool fetching daily FII/DII institutional net flows for the cash segment
+/// (plan 0007 Track 2 Phase 4).
+pub struct InstitutionalFlowsTool {
+    reader: Arc<dyn MarketReader>,
+    spec: ToolSpec,
+}
+
+impl InstitutionalFlowsTool {
+    /// Create new institutional flows tool.
+    pub fn new(reader: Arc<dyn MarketReader>) -> Self {
+        let schema = schemars::schema_for!(InstitutionalFlowsInput);
+        let spec = ToolSpec::new(
+            "institutional_flows",
+            "Fetch daily FII/DII institutional net flows (cash segment) for a trading day.",
+            serde_json::to_value(schema).unwrap_or_default(),
+        );
+        Self { reader, spec }
+    }
+}
+
+#[async_trait]
+impl ChatTool for InstitutionalFlowsTool {
+    fn spec(&self) -> &ToolSpec {
+        &self.spec
+    }
+
+    fn traits(&self) -> ToolTraits {
+        ToolTraits::new(ToolRisk::ReadOnly)
+    }
+
+    fn plan(&self, _input: &Value, _ctx: &PlanContext<'_>) -> Result<ToolPlan, ToolError> {
+        Ok(ToolPlan::new(
+            "Fetch daily FII/DII institutional net flows".to_string(),
+        ))
+    }
+
+    async fn execute(&self, input: Value, _ctx: ToolContext) -> Result<ToolOutput, ToolError> {
+        let args: InstitutionalFlowsInput =
+            serde_json::from_value(input).map_err(|e| ToolError::InvalidArguments {
+                tool: "institutional_flows".to_string(),
+                message: format!("schema validation failure: {e}"),
+            })?;
+
+        let date = args.date.as_deref().and_then(parse_timestamp);
+        let flows = self
+            .reader
+            .institutional_flows(date)
+            .await
+            .map_err(|e| e.into_tool_error("institutional_flows"))?;
+
+        let flows_json: Vec<Value> = flows
+            .into_iter()
+            .map(|f| {
+                serde_json::json!({
+                    "category": f.category,
+                    "buy_value": f.buy_value.amount,
+                    "sell_value": f.sell_value.amount,
+                    "net_value": f.net_value.amount,
+                    "trade_date": f.trade_date,
+                })
+            })
+            .collect();
+
+        Ok(ToolOutput::ok(
+            "institutional_flows",
+            serde_json::json!({
+                "flows": flows_json,
+                "count": flows_json.len(),
             }),
         ))
     }
