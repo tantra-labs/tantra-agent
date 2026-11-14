@@ -69,9 +69,12 @@
     (new `CalendarReader` port), catalogue **19 → 22 read-only**; honest
     `PortError::unavailable` stubs citing market 0006 / data 0017 / data 0018. Commit `150bcae`.
 - **Rename to Tantra (plan `tantra-labs` 0004, 2026-11-12)**: workspace renamed to `tantra-*`.
-  **Pre-existing, non-rename failure**: `test_architectural_dependency_rules` (R4) fails —
-  `tantra-agent-mcp` depends on `tantra-ledger-allocation`; R4 predates it (`ef879be`,
-  2026-11-06). Decide: drop the dep or widen R4 to allow mcp (the MPO MCP tool keeps the dep).
+  The pre-existing `test_architectural_dependency_rules` failure is **resolved 2026-11-14**:
+  R1 + R4 widened to allow the two intentional pure-compute edges out of `tantra-agent-mcp`
+  (`→ tantra-market-pricing` for the derivatives/greeks gateway tools, plan 0007 Track 1 Ph 3;
+  `→ tantra-ledger-allocation` for the MPO gateway tool, plan 0007 Track 4). Test green;
+  rules updated in `docs/design/architecture.md` §2. Market *data* access stays inverted
+  through reader traits.
 
 - **Docs overhaul (2026-11-12)**: the historical `docs/roadmap/` was dismantled into
   `docs/design/`, `docs/gaps/`, `docs/plans/` and the whole set rewritten to match the source.
@@ -101,8 +104,9 @@
   - Plan 0010 (T6.12, Implemented): close `tantra-data` 0017/0019, `tantra-market` 0006, and
     wire `ParquetOpenInterestStore` + `BuildupAnalyzer` into `FeedMarketReader::oi_buildup`
     (runtime gap 0007 item 13).
-- **R4 architectural-dependency test** (pre-existing): decide whether to drop the
-  `tantra-agent-mcp` → `tantra-ledger-allocation` dep or widen R4 to allow mcp.
+- **R4 architectural-dependency test** (pre-existing): **resolved 2026-11-14** — R1 and R4
+  widened for the two intentional `tantra-agent-mcp` compute edges (`tantra-market-pricing`,
+  `tantra-ledger-allocation`); test green, rules in `docs/design/architecture.md` §2.
 - **Filing discipline**: new chat-tool categories need provider-repo gap docs (`tantra-data`
   next 0023+; `tantra-market` next 0007+) before tool code.
 

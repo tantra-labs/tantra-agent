@@ -29,7 +29,11 @@ fn test_architectural_dependency_rules() {
         for dep in deps {
             let dep_name = dep["name"].as_str().unwrap_or("");
 
-            // Rule R1: No tantra-agent-* crate depends on tantra-runtime-*, tantra-exec-*, or tantra-market-*
+            // Rule R1: No tantra-agent-* crate depends on tantra-runtime-*, tantra-exec-*, or
+            // tantra-market-* — with one compute-only exception: `tantra-agent-mcp` →
+            // `tantra-market-pricing` (the derivatives/greeks MCP gateway tools, plan 0007
+            // Track 1 Phase 3 — widened 2026-11-14 per architecture.md §2). Market *data*
+            // access remains inverted through reader traits; only pure computation is allowed.
             assert!(
                 !dep_name.starts_with("tantra-runtime"),
                 "Violation of Rule R1: `{pkg_name}` cannot depend on `{dep_name}`"
@@ -38,10 +42,16 @@ fn test_architectural_dependency_rules() {
                 !dep_name.starts_with("tantra-exec"),
                 "Violation of Rule R1: `{pkg_name}` cannot depend on `{dep_name}`"
             );
-            assert!(
-                !dep_name.starts_with("tantra-market"),
-                "Violation of Rule R1: `{pkg_name}` cannot depend on `{dep_name}`"
-            );
+            if dep_name.starts_with("tantra-market") {
+                // The only allowed market edge: `tantra-agent-mcp` →
+                // `tantra-market-pricing` (pure computation, no data access).
+                let allowed =
+                    pkg_name == "tantra-agent-mcp" && dep_name == "tantra-market-pricing";
+                assert!(
+                    allowed,
+                    "Violation of Rule R1: `{pkg_name}` cannot depend on `{dep_name}`"
+                );
+            }
 
             // Rule R2: tantra-agent-chat and tantra-agent-chat-tools do not depend on tantra-agent-trader-loop
             if pkg_name == "tantra-agent-chat" || pkg_name == "tantra-agent-chat-tools" {
@@ -81,11 +91,17 @@ fn test_architectural_dependency_rules() {
                 );
             }
 
-            // Rule R4: The only downward edge out of Tier 3A to tantra-ledger is tantra-agent-chat-tools
+            // Rule R4: The only downward edges out of Tier 3A to tantra-ledger are
+            // tantra-agent-chat-tools (types only) and tantra-agent-mcp →
+            // tantra-ledger-allocation (the `tantra_multi_period_optimize` MCP gateway tool,
+            // plan 0007 Track 4 — widened 2026-11-14 per the documented decision in
+            // `tantra-agent/docs/design/architecture.md` §2).
             if dep_name.starts_with("tantra-ledger") {
-                assert_eq!(
-                    pkg_name, "tantra-agent-chat-tools",
-                    "Violation of Rule R4: only tantra-agent-chat-tools may depend on tantra-ledger, found `{pkg_name}`"
+                let allowed = pkg_name == "tantra-agent-chat-tools"
+                    || (pkg_name == "tantra-agent-mcp" && dep_name == "tantra-ledger-allocation");
+                assert!(
+                    allowed,
+                    "Violation of Rule R4: only tantra-agent-chat-tools (types only) and tantra-agent-mcp → tantra-ledger-allocation may depend on tantra-ledger, found `{pkg_name}` → `{dep_name}`"
                 );
             }
         }

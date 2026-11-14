@@ -16,8 +16,8 @@ Per Design Doc 0001, `tantra-agent` strictly enforces inverted dependencies. Rul
 
 * **R1**: No `tantra-agent-*` crate may depend on `tantra-runtime-*`. Runtime depends on agent or implements agent ports.
 * **R2**: No `tantra-agent-*` crate may depend on `tantra-exec-*`. Execution is mediated by runtime and risk engines.
-* **R3**: No `tantra-agent-*` crate may depend on `tantra-market-*`. Market reads are inverted through reader traits.
-* **R4**: No `tantra-agent-*` crate may depend on `tantra-ledger` except `tantra-agent-chat-tools` (types only).
+* **R3**: No `tantra-agent-*` crate may depend on `tantra-market-*` — market reads are inverted through reader traits — except the pure-computation `tantra-agent-mcp` → `tantra-market-pricing` edge (derivatives/greeks MCP gateway tools, plan 0007 Track 1 Phase 3; widened 2026-11-14).
+* **R4**: No `tantra-agent-*` crate may depend on `tantra-ledger` except `tantra-agent-chat-tools` (types only) and `tantra-agent-mcp` → `tantra-ledger-allocation` (the `tantra_multi_period_optimize` MCP gateway tool, plan 0007 Track 4 — widened 2026-11-14).
 * **R5**: External consumers/adapters depend on minimal core traits (`tantra-agent-core::ports`).
 
 ## 3. Sub-Crate Topology (17 Crates)
