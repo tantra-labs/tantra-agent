@@ -14,6 +14,7 @@ Per workspace rule `.agents/rules/gap-tracking.md`:
 | [0011](0011-elephant-edge-level-map-chat-tools.md) | Elephant Edge Level-Map & OI-Wall Chat Tools | `tantra-agent-chat-tools`, `tantra-runtime-api(-rest)` | Proposed — `level_map` + `oi_walls` ReadOnly tools on `tantra-core` plan 0003 wire types; cites plan 0010 (Implemented); master plan root `docs/plans/0005` |
 | [0012](0012-agent-roster-culmination-prism-fincept.md) | Agent Roster Culmination: Prism Insight (13) + Fincept (37) into the Tantra Persona Desk | `tantra-agent-prompt` (persona.rs), `skills/`, playbook `docs/design/agents/0001-guide.md` | Approved Design & Implementation Roadmap — 14-persona desk (9 existing + 5 new) + lenses (6 economic schools, 11 investor mentors, 20 geopolitics modes); docs/design/plan only, no code landed; UI wiring tracked by `tantra-ui` plan 0007 |
 | [0013](0013-screener-mcp-tools.md) | Screener, Universe, Alert & Watchlist MCP Tools | `tantra-agent-mcp`, `tantra-agent-chat-tools`, `tantra-agent-tools` | Proposed — research `docs/research/trendlyne-screener-alerts-mcp.md`; root plan `docs/plans/0007` (F8) |
+| [0014](0014-real-trade-suggestion-and-trade-plan-mcp.md) | Real Trade Suggestion & `trade_plan` MCP Tools (replace `strategy_suggest` stub) | `tantra-agent-chat-tools`, `tantra-agent-mcp` | Proposed — root plan `docs/plans/0008` |
 
 ## Implemented Plans
 
