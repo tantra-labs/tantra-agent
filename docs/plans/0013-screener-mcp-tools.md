@@ -7,7 +7,7 @@
 Give agents a full-market screening surface over MCP: browse the screen catalog, discover metrics,
 run a screen across a whole universe, resolve universes, look up classification, read QVM scores,
 manage alert rules and watchlists. Tools are defined against ports in `tantra-agent-*` and return
-`PortError::unavailable` until [tantra-runtime 0005](../../../tantra-runtime/docs/plans/0005-group-screener-alerts.md)
+`PortError::unavailable` until [tantra-runtime 0007](../../../tantra-runtime/docs/plans/0007-group-screener-alerts.md)
 wires implementations.
 
 References: research [`trendlyne-screener-alerts-mcp.md`](../../../docs/research/trendlyne-screener-alerts-mcp.md) (F8);
