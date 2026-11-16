@@ -38,7 +38,7 @@ Tantra's `screen_run` scans the whole universe and pairs with native Alpha-style
 - Define async `#[async_trait]` ports in `tantra-agent-chat-tools::ports` (reused by `tantra-agent-mcp` without violating R1/R2):
   - `ScreenerPort` (catalog browse, metric search, full-universe scan)
   - `UniversePort` (point-in-time universe resolve, classification lookup, QVM lookup)
-  - `AlertRulePort` (CRUD, snooze, events, digests, preset notification packs — superseding/extending `AlertReader`/`AlertWriter`)
+  - `AlertRulePort` (CRUD, snooze, events, digests, preset notification packs — superseding/extending `AlertReader`/`AlertWriter`, preserving optional `workspace_id` filtering & attribution)
   - `WatchlistPort` (create, list, add/remove instruments)
 - Typed DTOs from `tantra-core` 0004 (screener/classification) and `tantra-runtime-api` / shared L3 alert contract; explicit `PortError::unavailable(...)` until wired by `tantra-runtime`.
 
@@ -49,16 +49,16 @@ Tantra's `screen_run` scans the whole universe and pairs with native Alpha-style
   - `screen_run{preset_id | group, universe, sort, limit}` — full-universe scan; large results returned as `$tantra/ref` handles via `DataReferenceStore` with a bounded inline preview.
   - `universe_resolve{name, as_of?}`, `classification_lookup{instruments[]}`, `qvm_score{instruments[], as_of?}`.
 - **Alpha-Alerts & Digests (`LocalWrite` tier, `Caller`-scoped)**:
-  - `alert_preset_list{category?}` & `alert_preset_subscribe{preset_id, universes[], delivery_mode, channels[]}` — one-click Alpha-Alert packs over portfolios/watchlists.
-  - `alert_rule_create{name, universes[], condition, frequency, delivery, cooldown_secs?}` — supports both `ScreenEdge` (preset or inline `ScreenerFilterGroup`) and `EventMatch` (results, corp actions, filings, deals, QVM transitions).
-  - `alert_rule_list{universe?, enabled?}`, `alert_rule_update{...}`, `alert_rule_snooze{rule_id, until}`, `alert_rule_delete{rule_id}`.
-  - `alert_events_list{rule_id?, since?, limit?}` & `alert_digest_prefs{mode, channels, quiet_hours?}`.
+  - `alert_preset_list{category?}` & `alert_preset_subscribe{preset_id, universes[], delivery_mode, channels[], workspace_id?}` — one-click Alpha-Alert packs over portfolios/watchlists.
+  - `alert_rule_create{name, universes[], condition, frequency, delivery, cooldown_secs?, workspace_id?}` — supports both `ScreenEdge` (preset or inline `ScreenerFilterGroup`) and `EventMatch` (results, corp actions, filings, deals, QVM transitions).
+  - `alert_rule_list{universe?, workspace_id?, enabled?}`, `alert_rule_update{...}`, `alert_rule_snooze{rule_id, until}`, `alert_rule_delete{rule_id}`.
+  - `alert_events_list{rule_id?, workspace_id?, since?, limit?}` & `alert_digest_prefs{mode, channels, quiet_hours?}`.
 - **Watchlists (`LocalWrite` tier, `Caller`-scoped)**:
   - `watchlist_create|list|add|remove`.
 - Register all in `list_tool_definitions` and `call_tool`; discoverable via `tantra_search_tools`.
 
 ### Phase C — Chat tools (`tantra-agent-chat-tools`)
-- Extend chat `ScreenerQueryTool` adapter / add `CatalogScreenTool` for group rules & catalog presets; evolve `PriceAlertTool` into `AlphaAlertTool` supporting multi-universe group/event alerts and preset subscriptions while keeping single-price convenience syntax.
+- Extend chat `ScreenerQueryTool` adapter / add `CatalogScreenTool` for group rules & catalog presets; evolve `PriceAlertTool` into `AlphaAlertTool` supporting multi-universe group/event alerts and preset subscriptions while keeping single-price convenience syntax (`workspace_id` optional).
 - Follow the plan 0006 category-addition recipe (DTO+port -> tool -> catalog -> runtime wiring -> count-test bump).
 
 ## 3. Test Plan (TDD)
