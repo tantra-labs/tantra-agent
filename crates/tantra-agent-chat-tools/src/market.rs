@@ -4,7 +4,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -53,6 +53,23 @@ pub fn parse_instrument(s: &str) -> Result<InstrumentId, ToolError> {
 /// Helper to parse optional RFC3339 timestamp.
 fn parse_timestamp(s: &str) -> Option<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(s).ok().map(|dt| dt.to_utc())
+}
+
+/// Parse an optional `YYYY-MM-DD` calendar date for the level-map / OI-wall tools.
+///
+/// An empty string is treated as "not provided" (`Ok(None)`); a malformed date is an
+/// `InvalidArguments` error so the model gets actionable feedback.
+fn parse_naive_date_opt(s: &str) -> Result<Option<NaiveDate>, ToolError> {
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    NaiveDate::parse_from_str(trimmed, "%Y-%m-%d")
+        .map(Some)
+        .map_err(|e| ToolError::InvalidArguments {
+            tool: "market".to_string(),
+            message: format!("invalid date `{s}` (expected YYYY-MM-DD): {e}"),
+        })
 }
 
 // ——————————————————————————————————————————————————————————————————————————
@@ -1198,6 +1215,172 @@ impl ChatTool for OiBuildupTool {
                 "oi_change_pct": snapshot.oi_change_pct,
                 "price_change_pct": snapshot.price_change_pct,
                 "classification": snapshot.classification,
+            }),
+        ))
+    }
+}
+
+// ——————————————————————————————————————————————————————————————————————————
+// 13. level_map
+// ——————————————————————————————————————————————————————————————————————————
+
+/// Input arguments for `level_map`.
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LevelMapInput {
+    /// Instrument symbol (e.g. "NSE:NIFTY").
+    pub instrument: String,
+    /// Session date (`YYYY-MM-DD`). Defaults to the latest trading day.
+    pub date: Option<String>,
+}
+
+/// Chat tool returning the session's intraday level map — Elephant percentile zones, OI
+/// walls, gamma flip, max pain, PDH/PDL, and order blocks with confluence scores —
+/// serialized from `tantra_core::LevelMap` (plan 0011 / EE+).
+pub struct LevelMapTool {
+    reader: Arc<dyn MarketReader>,
+    spec: ToolSpec,
+}
+
+impl LevelMapTool {
+    /// Create new level-map tool.
+    pub fn new(reader: Arc<dyn MarketReader>) -> Self {
+        let schema = schemars::schema_for!(LevelMapInput);
+        let spec = ToolSpec::new(
+            "level_map",
+            "Return the session's intraday level map (Elephant zones, OI walls, gamma flip, max pain, PDH/PDL, order blocks) with confluence scores for an instrument.",
+            serde_json::to_value(schema).unwrap_or_default(),
+        );
+        Self { reader, spec }
+    }
+}
+
+#[async_trait]
+impl ChatTool for LevelMapTool {
+    fn spec(&self) -> &ToolSpec {
+        &self.spec
+    }
+
+    fn traits(&self) -> ToolTraits {
+        ToolTraits::new(ToolRisk::ReadOnly)
+    }
+
+    fn plan(&self, input: &Value, _ctx: &PlanContext<'_>) -> Result<ToolPlan, ToolError> {
+        let inst = input
+            .get("instrument")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        Ok(ToolPlan::new(format!(
+            "Fetch the intraday level map for `{inst}`"
+        )))
+    }
+
+    async fn execute(&self, input: Value, _ctx: ToolContext) -> Result<ToolOutput, ToolError> {
+        let args: LevelMapInput =
+            serde_json::from_value(input).map_err(|e| ToolError::InvalidArguments {
+                tool: "level_map".to_string(),
+                message: format!("schema validation failure: {e}"),
+            })?;
+
+        let inst = parse_instrument(&args.instrument)?;
+        let date = match args.date {
+            Some(d) => parse_naive_date_opt(&d)?,
+            None => None,
+        };
+        let map = self
+            .reader
+            .level_map(&inst, date)
+            .await
+            .map_err(|e| e.into_tool_error("level_map"))?;
+
+        Ok(ToolOutput::ok(
+            "level_map",
+            serde_json::json!({
+                "instrument": inst.to_string(),
+                "levels": &map.levels,
+            }),
+        ))
+    }
+}
+
+// ——————————————————————————————————————————————————————————————————————————
+// 14. oi_walls
+// ——————————————————————————————————————————————————————————————————————————
+
+/// Input arguments for `oi_walls`.
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct OiWallsInput {
+    /// Instrument symbol (e.g. "NSE:NIFTY").
+    pub instrument: String,
+    /// Contract expiry (`YYYY-MM-DD`). Defaults to the nearest expiry.
+    pub expiry: Option<String>,
+}
+
+/// Chat tool returning the top call/put open-interest walls with delta-OI building scores
+/// and the local put-call ratio for an instrument/expiry (plan 0011 / EE+ Layer A-C).
+pub struct OiWallsTool {
+    reader: Arc<dyn MarketReader>,
+    spec: ToolSpec,
+}
+
+impl OiWallsTool {
+    /// Create new OI-wall tool.
+    pub fn new(reader: Arc<dyn MarketReader>) -> Self {
+        let schema = schemars::schema_for!(OiWallsInput);
+        let spec = ToolSpec::new(
+            "oi_walls",
+            "Return the top call/put open-interest walls with delta-OI building scores and the local put-call ratio for an instrument's option chain.",
+            serde_json::to_value(schema).unwrap_or_default(),
+        );
+        Self { reader, spec }
+    }
+}
+
+#[async_trait]
+impl ChatTool for OiWallsTool {
+    fn spec(&self) -> &ToolSpec {
+        &self.spec
+    }
+
+    fn traits(&self) -> ToolTraits {
+        ToolTraits::new(ToolRisk::ReadOnly)
+    }
+
+    fn plan(&self, input: &Value, _ctx: &PlanContext<'_>) -> Result<ToolPlan, ToolError> {
+        let inst = input
+            .get("instrument")
+            .and_then(Value::as_str)
+            .unwrap_or("unknown");
+        Ok(ToolPlan::new(format!("Fetch the OI walls for `{inst}`")))
+    }
+
+    async fn execute(&self, input: Value, _ctx: ToolContext) -> Result<ToolOutput, ToolError> {
+        let args: OiWallsInput =
+            serde_json::from_value(input).map_err(|e| ToolError::InvalidArguments {
+                tool: "oi_walls".to_string(),
+                message: format!("schema validation failure: {e}"),
+            })?;
+
+        let inst = parse_instrument(&args.instrument)?;
+        let expiry = match args.expiry {
+            Some(e) => parse_naive_date_opt(&e)?,
+            None => None,
+        };
+        let snapshot = self
+            .reader
+            .oi_walls(&inst, expiry)
+            .await
+            .map_err(|e| e.into_tool_error("oi_walls"))?;
+
+        Ok(ToolOutput::ok(
+            "oi_walls",
+            serde_json::json!({
+                "instrument": inst.to_string(),
+                "as_of": snapshot.as_of,
+                "top_call_walls": snapshot.top_call_walls,
+                "top_put_walls": snapshot.top_put_walls,
+                "local_pcr": snapshot.local_pcr,
             }),
         ))
     }

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
 use tantra_agent_chat::event::{CallId, TurnId};
@@ -27,7 +27,8 @@ use tantra_agent_chat_tools::ports::ipo::{IpoIssue, IpoReader, IpoSubscription};
 use tantra_agent_chat_tools::ports::market::{
     BlockDeal, CorporateAction, DeliveryBar, InstitutionalFlow, InstrumentSearchResult,
     MacroSeries, MarketBar, MarketDepth, MarketDepthLevel, MarketHistory, MarketIndicators,
-    MarketQuote, MarketReader, OiBuildupSnapshot, OptionContract, OptionsChain,
+    MarketQuote, MarketReader, OiBuildupSnapshot, OiWall, OiWallsSnapshot, OptionContract,
+    OptionsChain,
 };
 use tantra_agent_chat_tools::ports::portfolio::{
     AccountSummary, DateRange, OrderFilter, PortfolioReader,
@@ -44,8 +45,9 @@ use tantra_agent_chat_tools::trade_intent::trade_intent_to_decision;
 use tantra_agent_chat_tools::{create_alert_tools, register_alert_tools};
 use tantra_agent_core::ToolError;
 use tantra_core::{
-    AccountId, AlgoId, ClientOrderId, Exchange, InstrumentId, Money, OrderSide, OrderStatus,
-    OrderType, PositionSide, Price, PriceBand, Quantity, TimeInForce,
+    AccountId, AlgoId, ClientOrderId, Exchange, InstrumentId, Level, LevelId, LevelKind, LevelMap,
+    LevelSide, Money, OrderSide, OrderStatus, OrderType, PositionSide, Price, PriceBand, Quantity,
+    TimeInForce,
 };
 use tantra_ledger::repository::OrderRecord;
 use tantra_ledger::{PositionRecord, TaxLot};
@@ -381,6 +383,62 @@ impl MarketReader for MockMarketReader {
             oi_change_pct: Some(dec!(6.5)),
             price_change_pct: Some(dec!(2.1)),
             classification: "long_buildup".to_string(),
+        })
+    }
+
+    async fn level_map(
+        &self,
+        _instrument: &InstrumentId,
+        _date: Option<NaiveDate>,
+    ) -> Result<LevelMap, PortError> {
+        if self.fail_quotes {
+            return Err(PortError::unavailable(
+                "level-map reader not wired; see tantra-market/docs/gaps/0005-elephant-zones-oi-levels-and-orderblock-indicators.md",
+            ));
+        }
+        Ok(LevelMap::new(vec![
+            Level::new(
+                LevelId(1),
+                LevelKind::ElephantResistance1,
+                LevelSide::Resistance,
+                (dec!(2515.0), dec!(2525.0)),
+                3,
+            )
+            .expect("valid level band and score"),
+            Level::new(
+                LevelId(2),
+                LevelKind::MaxPain,
+                LevelSide::Resistance,
+                (dec!(25000.0), dec!(25000.0)),
+                2,
+            )
+            .expect("valid level band and score"),
+        ]))
+    }
+
+    async fn oi_walls(
+        &self,
+        _instrument: &InstrumentId,
+        _expiry: Option<NaiveDate>,
+    ) -> Result<OiWallsSnapshot, PortError> {
+        if self.fail_quotes {
+            return Err(PortError::unavailable(
+                "OI-wall reader not wired; see tantra-data/docs/gaps/0016-intraday-option-chain-snapshot-lakehouse.md",
+            ));
+        }
+        Ok(OiWallsSnapshot {
+            top_call_walls: vec![OiWall {
+                strike: Price(dec!(25000.0)),
+                oi: dec!(1250000.0),
+                delta_oi_score: dec!(0.82),
+            }],
+            top_put_walls: vec![OiWall {
+                strike: Price(dec!(24800.0)),
+                oi: dec!(980000.0),
+                delta_oi_score: dec!(0.64),
+            }],
+            local_pcr: dec!(0.78),
+            as_of: Utc::now(),
         })
     }
 }
@@ -1989,7 +2047,7 @@ async fn test_total_read_only_catalogue_count() {
         None,
     );
     let specs = registry.specs();
-    assert_eq!(specs.len(), 32);
+    assert_eq!(specs.len(), 34);
 
     for spec in &specs {
         let tool = registry.get(&spec.name).unwrap();
@@ -2453,6 +2511,155 @@ async fn oi_buildup_tool_returns_classification() {
     let err = tool
         .execute(
             serde_json::json!({ "instrument": "NSE:RELIANCE", "bogus": true }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, ToolError::InvalidArguments { .. }),
+        "unknown field must be rejected, got {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn level_map_and_oi_walls_tools() {
+    let market = Arc::new(MockMarketReader { fail_quotes: false });
+    let mut registry = ToolRegistry::new();
+    register_read_only_tools(
+        &mut registry,
+        Arc::new(MockPortfolioReader),
+        market,
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
+        None,
+    );
+
+    let map_tool = registry.get("level_map").expect("level_map registered");
+    assert_eq!(map_tool.spec().name, "level_map");
+    assert_eq!(map_tool.traits().risk, ToolRisk::ReadOnly);
+    let walls_tool = registry.get("oi_walls").expect("oi_walls registered");
+    assert_eq!(walls_tool.spec().name, "oi_walls");
+    assert_eq!(walls_tool.traits().risk, ToolRisk::ReadOnly);
+
+    // 1. level_map — success, no date filter; levels carry kind/side/band/score.
+    let out = map_tool
+        .execute(
+            serde_json::json!({ "instrument": "NSE:NIFTY" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["instrument"], "NSE:NIFTY");
+    assert_eq!(out.payload["levels"][0]["id"], 1);
+    assert_eq!(out.payload["levels"][0]["kind"], "elephant_resistance1");
+    assert_eq!(out.payload["levels"][0]["side"], "resistance");
+    assert_eq!(parse_dec(&out.payload["levels"][0]["band"][0]), 2515.0);
+    assert_eq!(parse_dec(&out.payload["levels"][0]["band"][1]), 2525.0);
+    assert_eq!(out.payload["levels"][0]["score"], 3);
+    assert_eq!(out.payload["levels"][1]["kind"], "max_pain");
+
+    // 2. level_map — date parsed through to the port.
+    let out = map_tool
+        .execute(
+            serde_json::json!({ "instrument": "NSE:NIFTY", "date": "2026-11-17" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["levels"][0]["id"], 1);
+
+    // 3. oi_walls — success; walls and local PCR serialized.
+    let out = walls_tool
+        .execute(
+            serde_json::json!({ "instrument": "NSE:NIFTY" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["instrument"], "NSE:NIFTY");
+    assert_eq!(
+        parse_dec(&out.payload["top_call_walls"][0]["strike"]),
+        25000.0
+    );
+    assert_eq!(
+        parse_dec(&out.payload["top_call_walls"][0]["oi"]),
+        1250000.0
+    );
+    assert_eq!(
+        parse_dec(&out.payload["top_call_walls"][0]["delta_oi_score"]),
+        0.82
+    );
+    assert_eq!(
+        parse_dec(&out.payload["top_put_walls"][0]["strike"]),
+        24800.0
+    );
+    assert_eq!(
+        parse_dec(&out.payload["top_put_walls"][0]["delta_oi_score"]),
+        0.64
+    );
+    assert_eq!(parse_dec(&out.payload["local_pcr"]), 0.78);
+    assert!(out.payload["as_of"].is_string());
+
+    // 4. oi_walls — expiry parsed through to the port.
+    let out = walls_tool
+        .execute(
+            serde_json::json!({ "instrument": "NSE:NIFTY", "expiry": "2026-11-26" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(
+        parse_dec(&out.payload["top_call_walls"][0]["strike"]),
+        25000.0
+    );
+
+    // 5. Honest unavailability when no level-map / OI-wall source is wired.
+    let failing = Arc::new(MockMarketReader { fail_quotes: true });
+    let mut fail_registry = ToolRegistry::new();
+    register_read_only_tools(
+        &mut fail_registry,
+        Arc::new(MockPortfolioReader),
+        failing,
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
+        None,
+    );
+    for name in ["level_map", "oi_walls"] {
+        let err = fail_registry
+            .get(name)
+            .unwrap()
+            .execute(
+                serde_json::json!({ "instrument": "NSE:NIFTY" }),
+                dummy_tool_context(),
+            )
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(err, ToolError::Execution(..)),
+            "unavailable {name} port must surface as ToolError::Execution, got {err:?}"
+        );
+    }
+
+    // 6. deny_unknown_fields rejects unexpected arguments.
+    let err = map_tool
+        .execute(
+            serde_json::json!({ "instrument": "NSE:NIFTY", "bogus": true }),
             dummy_tool_context(),
         )
         .await

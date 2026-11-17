@@ -12,8 +12,8 @@ use crate::ipo::{IpoCalendarTool, IpoSubscriptionTool};
 use crate::lift::{lift_regime, lift_risk, lift_screener};
 use crate::market::{
     BlockDealsTool, CorporateActionsTool, DeliveryAnalysisTool, InstitutionalFlowsTool,
-    MacroSeriesTool, MarketDepthTool, MarketHistoryTool, MarketIndicatorsTool, MarketQuoteTool,
-    MarketSearchTool, OiBuildupTool, OptionsChainTool,
+    LevelMapTool, MacroSeriesTool, MarketDepthTool, MarketHistoryTool, MarketIndicatorsTool,
+    MarketQuoteTool, MarketSearchTool, OiBuildupTool, OiWallsTool, OptionsChainTool,
 };
 use crate::portfolio::{
     OrdersViewTool, PnlViewTool, PortfolioViewTool, PositionsViewTool, TaxLotsViewTool,
@@ -35,7 +35,7 @@ use crate::strategy_manage::StrategyManageTool;
 use crate::tax::TaxReportTool;
 use crate::trade_intent::ProposeTradeTool;
 
-/// Bundle of all 32 Phase B read-only conversational tools (§6.5).
+/// Bundle of all 34 Phase B read-only conversational tools (§6.5).
 ///
 /// The port set grows one `Arc<dyn ...>` reader per tool category; the flat signature
 /// deliberately mirrors `register_read_only_tools` and is allowed past clippy's
@@ -53,7 +53,7 @@ pub fn create_read_only_tools(
     snapshots: Option<Arc<dyn SnapshotSource>>,
 ) -> Vec<Arc<dyn ChatTool>> {
     vec![
-        // 1. Market tools (8)
+        // 1. Market tools (10)
         Arc::new(MarketQuoteTool::new(Arc::clone(&market))),
         Arc::new(MarketHistoryTool::new(Arc::clone(&market))),
         Arc::new(MarketIndicatorsTool::new(Arc::clone(&market))),
@@ -62,6 +62,8 @@ pub fn create_read_only_tools(
         Arc::new(BlockDealsTool::new(Arc::clone(&market))),
         Arc::new(OptionsChainTool::new(Arc::clone(&market))),
         Arc::new(CorporateActionsTool::new(Arc::clone(&market))),
+        Arc::new(LevelMapTool::new(Arc::clone(&market))),
+        Arc::new(OiWallsTool::new(Arc::clone(&market))),
         // 2. Portfolio tools (5)
         Arc::new(PortfolioViewTool::new(
             Arc::clone(&portfolio),
@@ -106,7 +108,7 @@ pub fn create_read_only_tools(
     ]
 }
 
-/// Register all 32 Phase B read-only chat tools into a registry (§6.5).
+/// Register all 34 Phase B read-only chat tools into a registry (§6.5).
 #[allow(clippy::too_many_arguments)]
 pub fn register_read_only_tools(
     registry: &mut ToolRegistry,

@@ -3,10 +3,10 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use tantra_core::{InstrumentId, Money, Price, PriceBand, Quantity};
+use tantra_core::{InstrumentId, LevelMap, Money, Price, PriceBand, Quantity};
 
 use crate::ports::error::PortError;
 use crate::ports::portfolio::DateRange;
@@ -243,6 +243,30 @@ pub struct OiBuildupSnapshot {
     pub classification: String,
 }
 
+/// One open-interest wall in a chain (plan 0011 / EE+ Layer A).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct OiWall {
+    /// Strike price of the wall.
+    pub strike: Price,
+    /// Open interest resting at the strike.
+    pub oi: Decimal,
+    /// Delta-open-interest building score (exact decimal, higher = building faster).
+    pub delta_oi_score: Decimal,
+}
+
+/// One instrument/expiry's open-interest wall snapshot (plan 0011 / EE+ Layer A-C inputs).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct OiWallsSnapshot {
+    /// Top call-side OI walls by open interest.
+    pub top_call_walls: Vec<OiWall>,
+    /// Top put-side OI walls by open interest.
+    pub top_put_walls: Vec<OiWall>,
+    /// Local put-call ratio for the chain.
+    pub local_pcr: Decimal,
+    /// Snapshot timestamp.
+    pub as_of: DateTime<Utc>,
+}
+
 /// Read-only market data port (§6.4).
 ///
 /// Implemented by runtime application layer over market feeds and history stores.
@@ -360,4 +384,38 @@ pub trait MarketReader: Send + Sync + 'static {
         instrument: &InstrumentId,
         lookback_days: Option<u32>,
     ) -> Result<OiBuildupSnapshot, PortError>;
+
+    /// Fetch the session's intraday level map for an instrument — Elephant percentile
+    /// zones, OI walls, gamma flip, max pain, PDH/PDL, and order blocks, each with a
+    /// confluence score — serialized from `tantra_core::LevelMap` (plan 0011 / EE+).
+    ///
+    /// Upstream state (verified 2026-11-17): the kernel wire types exist (`tantra-core`
+    /// `levels`, plan 0003), but no source serves the map — the Elephant-zone / OI-wall /
+    /// gamma / order-block indicators are an open gap
+    /// (`tantra-market/docs/gaps/0005-elephant-zones-oi-levels-and-orderblock-indicators.md`)
+    /// and no as-of level-map snapshot store exists
+    /// (`tantra-data/docs/gaps/0016-intraday-option-chain-snapshot-lakehouse.md`).
+    /// Implementors without a level-map source must answer `PortError::unavailable`
+    /// citing those gaps — never an empty map.
+    async fn level_map(
+        &self,
+        instrument: &InstrumentId,
+        date: Option<NaiveDate>,
+    ) -> Result<LevelMap, PortError>;
+
+    /// Fetch the top call/put open-interest walls with delta-OI building scores and the
+    /// local put-call ratio for an instrument/expiry (plan 0011 / EE+ Layer A-C inputs).
+    ///
+    /// Upstream state (verified 2026-11-17): the intraday option-chain snapshot lakehouse
+    /// (OI/ΔOI/IV/delta/gamma point-in-time series) does not exist — see
+    /// `tantra-data/docs/gaps/0016-intraday-option-chain-snapshot-lakehouse.md` — and the
+    /// per-strike indicator feeds remain an open `tantra-market` gap
+    /// (`tantra-market/docs/gaps/0005-elephant-zones-oi-levels-and-orderblock-indicators.md`).
+    /// Implementors without a chain-snapshot source must answer `PortError::unavailable`
+    /// citing those gaps — never an empty success.
+    async fn oi_walls(
+        &self,
+        instrument: &InstrumentId,
+        expiry: Option<NaiveDate>,
+    ) -> Result<OiWallsSnapshot, PortError>;
 }

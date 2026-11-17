@@ -45,8 +45,7 @@ fn test_architectural_dependency_rules() {
             if dep_name.starts_with("tantra-market") {
                 // The only allowed market edge: `tantra-agent-mcp` →
                 // `tantra-market-pricing` (pure computation, no data access).
-                let allowed =
-                    pkg_name == "tantra-agent-mcp" && dep_name == "tantra-market-pricing";
+                let allowed = pkg_name == "tantra-agent-mcp" && dep_name == "tantra-market-pricing";
                 assert!(
                     allowed,
                     "Violation of Rule R1: `{pkg_name}` cannot depend on `{dep_name}`"
