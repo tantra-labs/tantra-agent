@@ -12,7 +12,7 @@ use futures::Stream;
 use tokio::sync::{mpsc, oneshot};
 
 use tantra_agent_core::{NewSession, PersistedMessage, SessionId, SessionScope, SessionStore};
-use tantra_agent_llm::LlmProvider;
+use tantra_agent_llm::{LlmProvider, MessagePart};
 
 use crate::cancel::CancellationToken;
 use crate::error::ChatError;
@@ -35,6 +35,11 @@ pub enum SessionSelector {
 pub enum SessionCommand {
     Submit {
         text: String,
+        /// Multimodal content parts for this turn (image attachments); empty for text-only.
+        attachments: Vec<MessagePart>,
+        /// Per-turn provider override (e.g. a per-turn `model` override routed by the
+        /// runtime); `None` runs the turn against the session's default provider.
+        provider: Option<Arc<dyn LlmProvider>>,
         reply: oneshot::Sender<Result<TurnId, ChatError>>,
     },
     Cancel,
@@ -94,10 +99,26 @@ impl SessionHandle {
 
     /// Submit a user prompt to start the next turn.
     pub async fn submit(&self, text: impl Into<String>) -> Result<TurnId, ChatError> {
+        self.submit_turn(text, Vec::new(), None).await
+    }
+
+    /// Submit a user prompt with optional multimodal image parts, routed to `provider` when
+    /// given (per-turn model override) or to the session's default provider otherwise.
+    ///
+    /// This is the full turn submission entry point used by [`SessionHandle::submit`] and by
+    /// the runtime when a per-turn `model` override or image attachments are present.
+    pub async fn submit_turn(
+        &self,
+        text: impl Into<String>,
+        attachments: Vec<MessagePart>,
+        provider: Option<Arc<dyn LlmProvider>>,
+    ) -> Result<TurnId, ChatError> {
         let (reply_tx, reply_rx) = oneshot::channel();
         self.cmd_tx
             .send(SessionCommand::Submit {
                 text: text.into(),
+                attachments,
+                provider,
                 reply: reply_tx,
             })
             .await
@@ -205,7 +226,12 @@ impl SessionActor {
     pub async fn run(mut self) {
         while let Some(cmd) = self.cmd_rx.recv().await {
             match cmd {
-                SessionCommand::Submit { text, reply } => {
+                SessionCommand::Submit {
+                    text,
+                    attachments,
+                    provider,
+                    reply,
+                } => {
                     self.turn_counter += 1;
                     let turn_id = TurnId(self.turn_counter);
                     let _ = reply.send(Ok(turn_id));
@@ -241,6 +267,10 @@ impl SessionActor {
                         }
                     }
 
+                    // Per-turn model overrides route the whole turn through the override
+                    // provider; without one the session's default provider is used.
+                    let turn_provider = provider.unwrap_or_else(|| self.provider.clone());
+
                     let history_snapshot = self.history.clone();
                     let grants = self.session_grants.clone();
                     let turn_fut = run_turn(
@@ -249,8 +279,9 @@ impl SessionActor {
                         &self.system_prompt,
                         history_snapshot,
                         &text,
+                        attachments,
                         &self.tools,
-                        self.provider.clone(),
+                        turn_provider,
                         self.store.clone(),
                         self.event_tx.clone(),
                         &self.config,

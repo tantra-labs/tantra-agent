@@ -237,6 +237,64 @@ async fn test_chat_stream_assembles_tool_calls() {
     assert_eq!(stop_reason, Some(tantra_agent_llm::StopReason::ToolUse));
 }
 
+#[tokio::test]
+async fn test_chat_stream_serializes_multimodal_image_parts() {
+    // Gap 0009 (T17.2): image attachment parts serialize as the OpenAI multimodal content
+    // array (`type: image_url` + `data:<mime>;base64,<bytes>`) for vision-capable providers.
+    let sse = [
+        "data: {\"id\":\"1\",\"model\":\"gpt-4o-mini\",\"choices\":[{\"delta\":{\"content\":\"A bullish engulfing pattern.\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"1\",\"model\":\"gpt-4o-mini\",\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
+        "data: [DONE]\n\n",
+    ]
+    .concat();
+    let sse_clone = sse.clone();
+
+    let app = Router::new().route(
+        "/v1/chat/completions",
+        post(move |body: axum::body::Bytes| async move {
+            let value = read_json_body(body).await;
+            assert_eq!(value["stream"], true);
+            let content = value["messages"][0]["content"]
+                .as_array()
+                .expect("multimodal content must serialize as an array, not a plain string");
+            assert_eq!(content[0]["type"], "text");
+            assert_eq!(content[0]["text"], "Read this chart");
+            assert_eq!(content[1]["type"], "image_url");
+            assert_eq!(
+                content[1]["image_url"]["url"],
+                "data:image/png;base64,iVBORw0KGgo="
+            );
+            sse_response(sse_clone.clone())
+        }),
+    );
+    let addr = spawn_router(app).await;
+
+    let provider = OpenAiCompatibleProvider::new(format!("http://{addr}/v1"), None, "test-model");
+    assert!(provider.supports("vision"));
+    let request = ChatRequest {
+        messages: vec![ChatMessage::user_with_parts(
+            "Read this chart",
+            vec![tantra_agent_llm::MessagePart::Image {
+                mime_type: "image/png".to_string(),
+                data: "iVBORw0KGgo=".to_string(),
+            }],
+        )],
+        system_prompt: None,
+        tools: Vec::new(),
+        temperature: None,
+        max_tokens: None,
+    };
+
+    let mut stream = provider.chat_stream(&request).await.expect("chat_stream");
+    let mut text = String::new();
+    while let Some(event) = stream.next().await {
+        if let ChatStreamEvent::TextDelta { text: delta } = event.expect("stream event") {
+            text.push_str(&delta);
+        }
+    }
+    assert!(text.contains("bullish engulfing"));
+}
+
 #[test]
 fn test_llm_config_from_map_resolves_env() {
     let env = |key: &str| match key {

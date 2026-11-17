@@ -488,6 +488,14 @@ impl LlmProvider for CandleGgufProvider {
     }
 
     async fn chat_stream(&self, request: &ChatRequest) -> Result<EventStream, LlmError> {
+        // GGUF models served by this provider are text-only (no vision tower): reject image
+        // attachment parts with an explicit capability notice instead of dropping the bytes.
+        if request.has_image_parts() {
+            return Err(LlmError::Capability(format!(
+                "model {} does not support image attachments",
+                self.config.model_name
+            )));
+        }
         let prompt = Self::format_prompt(&request.messages, request.system_prompt.as_deref());
         let (tx, rx) = mpsc::channel(64);
 

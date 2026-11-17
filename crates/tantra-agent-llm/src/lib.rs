@@ -89,6 +89,13 @@ pub enum LlmError {
     /// The configured endpoint reported a model outside the free-tier allowlist.
     #[error("endpoint reported non-free-tier model: {0}")]
     NonFreeTierModel(String),
+    /// The model/provider cannot satisfy the requested capability (e.g. a text-only
+    /// provider receiving an image attachment, or a per-turn model override that has no
+    /// GGUF file / remote base URL configured for it). Carries the honest human-readable
+    /// capability notice; callers must surface it to the user rather than silently
+    /// falling back to another model.
+    #[error("{0}")]
+    Capability(String),
 }
 
 /// Role of a participant in a conversation turn.
@@ -127,6 +134,29 @@ pub struct LlmToolResult {
     pub is_error: bool,
 }
 
+/// Structured content part of a chat message (multimodal: text and image attachments).
+///
+/// Image parts carry base64-encoded image bytes ([`MessagePart::Image`]) for
+/// vision-capable providers; a text-only provider must answer with an explicit
+/// [`LlmError::Capability`] notice when it receives one instead of silently dropping the
+/// bytes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum MessagePart {
+    /// Plain text content.
+    Text {
+        /// Text fragment.
+        text: String,
+    },
+    /// Base64-encoded image attachment (e.g. a chart crop snapshot).
+    Image {
+        /// Image MIME type (`image/png`, `image/jpeg`).
+        mime_type: String,
+        /// Base64-encoded image bytes (never decoded/transformed by the pipeline).
+        data: String,
+    },
+}
+
 /// Structured chat message exchanged with model.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChatMessage {
@@ -140,6 +170,9 @@ pub struct ChatMessage {
     /// Tool call ID if role is Tool.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_call_id: Option<String>,
+    /// Optional multimodal content parts (image attachments for vision-capable providers).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub parts: Vec<MessagePart>,
 }
 
 impl ChatMessage {
@@ -150,6 +183,18 @@ impl ChatMessage {
             content: content.into(),
             tool_calls: Vec::new(),
             tool_call_id: None,
+            parts: Vec::new(),
+        }
+    }
+
+    /// Create a user message with multimodal content parts (image attachments).
+    pub fn user_with_parts(content: impl Into<String>, parts: Vec<MessagePart>) -> Self {
+        Self {
+            role: ChatRole::User,
+            content: content.into(),
+            tool_calls: Vec::new(),
+            tool_call_id: None,
+            parts,
         }
     }
 
@@ -160,6 +205,7 @@ impl ChatMessage {
             content: content.into(),
             tool_calls: Vec::new(),
             tool_call_id: None,
+            parts: Vec::new(),
         }
     }
 
@@ -170,6 +216,7 @@ impl ChatMessage {
             content: content.into(),
             tool_calls,
             tool_call_id: None,
+            parts: Vec::new(),
         }
     }
 
@@ -180,7 +227,15 @@ impl ChatMessage {
             content: output.into(),
             tool_calls: Vec::new(),
             tool_call_id: Some(call_id.into()),
+            parts: Vec::new(),
         }
+    }
+
+    /// Whether this message carries any image attachment part.
+    pub fn has_image_parts(&self) -> bool {
+        self.parts
+            .iter()
+            .any(|part| matches!(part, MessagePart::Image { .. }))
     }
 }
 
@@ -292,6 +347,16 @@ pub struct ChatRequest {
     pub max_tokens: Option<usize>,
 }
 
+impl ChatRequest {
+    /// Whether any message in the request carries an image attachment part (multimodal).
+    ///
+    /// Text-only providers must answer such a request with an explicit
+    /// [`LlmError::Capability`] notice, never by silently dropping the image bytes.
+    pub fn has_image_parts(&self) -> bool {
+        self.messages.iter().any(ChatMessage::has_image_parts)
+    }
+}
+
 /// Computes the SHA-256 hash of a prompt string.
 pub fn compute_prompt_hash(prompt: &str) -> PromptHash {
     let mut hasher = Sha256::new();
@@ -356,7 +421,11 @@ pub trait LlmProvider: Send + Sync + 'static {
 /// Scriptable mock LLM provider for deterministic unit and integration tests.
 pub struct ScriptedFakeLlm {
     model: String,
+    vision: bool,
     streams: Mutex<VecDeque<Vec<ChatStreamEvent>>>,
+    /// Every [`ChatRequest`] this fake has served (clones), so tests can assert which model
+    /// was routed to and whether image attachments reached the LLM boundary.
+    served: Mutex<Vec<ChatRequest>>,
 }
 
 impl ScriptedFakeLlm {
@@ -364,13 +433,27 @@ impl ScriptedFakeLlm {
     pub fn new(model: impl Into<String>) -> Self {
         Self {
             model: model.into(),
+            vision: false,
             streams: Mutex::new(VecDeque::new()),
+            served: Mutex::new(Vec::new()),
         }
+    }
+
+    /// Mark the fake as vision-capable ([`LlmProvider::supports`] `"vision"` → `true`), so
+    /// image attachment parts are accepted instead of rejected with a capability notice.
+    pub fn with_vision(mut self) -> Self {
+        self.vision = true;
+        self
     }
 
     /// Enqueue a scripted stream of events.
     pub fn push_stream(&self, events: Vec<ChatStreamEvent>) {
         self.streams.lock().unwrap().push_back(events);
+    }
+
+    /// The chat requests this fake has served so far, oldest first.
+    pub fn served_requests(&self) -> Vec<ChatRequest> {
+        self.served.lock().unwrap().clone()
     }
 
     /// Convenience: push a pure text completion response.
@@ -456,7 +539,14 @@ impl LlmProvider for ScriptedFakeLlm {
         ))
     }
 
-    async fn chat_stream(&self, _request: &ChatRequest) -> Result<EventStream, LlmError> {
+    async fn chat_stream(&self, request: &ChatRequest) -> Result<EventStream, LlmError> {
+        self.served.lock().unwrap().push(request.clone());
+        if request.has_image_parts() && !self.vision {
+            return Err(LlmError::Capability(format!(
+                "model {} does not support image attachments",
+                self.model
+            )));
+        }
         let events =
             self.streams.lock().unwrap().pop_front().ok_or_else(|| {
                 LlmError::Transport("no scripted response available in fake".into())
@@ -468,6 +558,13 @@ impl LlmProvider for ScriptedFakeLlm {
 
     fn context_window(&self) -> usize {
         128_000
+    }
+
+    fn supports(&self, feature: &str) -> bool {
+        match feature {
+            "vision" => self.vision,
+            _ => false,
+        }
     }
 }
 

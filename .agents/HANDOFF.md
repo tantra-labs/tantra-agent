@@ -4,6 +4,18 @@
 
 ## Phase / Slice Status
 
+- **T17.2 (runtime gap 0009 — multimodal chat plumbing, 2026-11-17)**: `tantra-agent-llm`
+  gained `MessagePart::Image { mime_type, data }` (base64) on `ChatMessage.parts`
+  (`#[serde(default, skip_serializing_if)]`, `user_with_parts`, `ChatRequest::has_image_parts`)
+  + `LlmError::Capability`; `OpenAiCompatibleProvider` serializes the OpenAI multimodal
+  content array + `supports("vision")`; `CandleGgufProvider`/`ScriptedFakeLlm` reject image
+  parts on text-only paths with the honest capability notice. `tantra-agent-chat` carries
+  attachments + per-turn provider overrides through the turn API (`SessionHandle::submit_turn`,
+  `SessionCommand::Submit` attachments/provider, `run_turn` gates on
+  `provider.supports("vision")` and streams the notice as text). Tests: chat unit_tests +3,
+  llm openai_compat_tests +1, all green on prod; fmt + clippy `-D warnings` clean. Runtime
+  consumer: `tantra-runtime-api-rest::chat` (gap 0009 closed).
+
 - **T6.10 (plan 0007 Track 5 — tool surface, 2026-11-14)**: safe trade intent / strategy
   CRUD / tax shipped:
   - Trade intent (Ph 12, NoFX approval-queue pattern): `TradeIntentSink` port + `propose_trade`

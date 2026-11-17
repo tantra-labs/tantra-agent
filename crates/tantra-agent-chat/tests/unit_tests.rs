@@ -297,3 +297,142 @@ fn test_tool_registry_tantra_prefix_resolution() {
     assert!(snapshot.get("tantra_market_quote").is_some());
     assert!(snapshot.get("tantra_calculate").is_some());
 }
+
+/// Drains session events until `TurnEnded`, collecting the streamed assistant text.
+async fn drain_until_turn_end(
+    events: &mut tantra_agent_chat::SessionEvents,
+) -> (String, TurnOutcome) {
+    let mut text = String::new();
+    let mut outcome = None;
+    while let Ok(Some(event)) = timeout(Duration::from_secs(5), events.recv()).await {
+        match event {
+            SessionEvent::TextDelta { text: delta, .. } => text.push_str(&delta),
+            SessionEvent::TurnEnded { outcome: out, .. } => {
+                outcome = Some(out);
+                break;
+            }
+            _ => {}
+        }
+    }
+    (text, outcome.unwrap_or_else(|| panic!("turn never ended")))
+}
+
+fn png_attachment() -> tantra_agent_llm::MessagePart {
+    tantra_agent_llm::MessagePart::Image {
+        mime_type: "image/png".to_string(),
+        data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==".to_string(),
+    }
+}
+
+#[tokio::test]
+async fn test_image_attachments_flow_to_vision_provider() {
+    // Gap 0009 (T17.2): image attachment parts ride through the turn into the LLM boundary for
+    // vision-capable providers.
+    let vision = Arc::new(ScriptedFakeLlm::new("vision-model").with_vision());
+    vision.push_text_response("I can see the chart crop.");
+
+    let store = Arc::new(InMemorySessionStore::new());
+    let registry = ToolRegistry::new();
+    let agent = ChatAgent::builder(vision.clone(), registry, store.clone())
+        .build()
+        .expect("agent");
+
+    let scope = SessionScope::new("vision-test", RuntimeMode::Paper);
+    let (handle, mut events) = agent.open(SessionSelector::New(scope)).await.expect("open");
+
+    handle
+        .submit_turn("Analyze this chart", vec![png_attachment()], None)
+        .await
+        .expect("submit");
+
+    let (text, outcome) = drain_until_turn_end(&mut events).await;
+    assert_eq!(outcome, TurnOutcome::Completed);
+    assert_eq!(text, "I can see the chart crop.");
+
+    // The vision provider received exactly one request carrying the image part.
+    let served = vision.served_requests();
+    assert_eq!(served.len(), 1);
+    assert!(served[0].has_image_parts());
+    assert!(matches!(
+        &served[0].messages[0].parts[0],
+        tantra_agent_llm::MessagePart::Image { mime_type, .. } if mime_type == "image/png"
+    ));
+
+    // The image part also persisted into the session history faithfully.
+    let history = handle.history().await.expect("history");
+    let user_msg = history
+        .iter()
+        .find(|pm| pm.role == "user")
+        .expect("user message persisted");
+    assert!(user_msg.content.get("attachments").is_some());
+}
+
+#[tokio::test]
+async fn test_text_only_provider_answers_capability_notice_for_images() {
+    // Gap 0009 (T17.2): a text-only provider MUST answer image attachments with the honest
+    // capability notice (streamed as text so it lands in the chat reply), never silently drop
+    // the bytes.
+    let text_only = Arc::new(ScriptedFakeLlm::new("textonly-model"));
+    text_only.push_text_response("must not be reached");
+
+    let store = Arc::new(InMemorySessionStore::new());
+    let registry = ToolRegistry::new();
+    let agent = ChatAgent::builder(text_only.clone(), registry, store)
+        .build()
+        .expect("agent");
+
+    let scope = SessionScope::new("vision-test", RuntimeMode::Paper);
+    let (handle, mut events) = agent.open(SessionSelector::New(scope)).await.expect("open");
+
+    handle
+        .submit_turn("Read this chart", vec![png_attachment()], None)
+        .await
+        .expect("submit");
+
+    let (text, outcome) = drain_until_turn_end(&mut events).await;
+    assert!(text.contains("textonly-model does not support image attachments"));
+    match outcome {
+        TurnOutcome::Failed { error } => {
+            assert_eq!(error.kind, "capability");
+            assert!(error.message.contains("does not support image attachments"));
+        }
+        other => panic!("expected a capability failure, got {other:?}"),
+    }
+    // The text-only provider was never invoked (the turn gates before the LLM boundary).
+    assert!(text_only.served_requests().is_empty());
+}
+
+#[tokio::test]
+async fn test_per_turn_provider_override_routes_the_turn() {
+    // Gap 0009 (T17.2): a per-turn provider override routes the whole turn through the
+    // override provider; the session's default provider stays untouched.
+    let default = Arc::new(ScriptedFakeLlm::new("default-llm"));
+    default.push_text_response("default answer");
+    let override_provider = Arc::new(ScriptedFakeLlm::new("override-llm"));
+    override_provider.push_text_response("override answer");
+
+    let store = Arc::new(InMemorySessionStore::new());
+    let registry = ToolRegistry::new();
+    let agent = ChatAgent::builder(default.clone(), registry, store)
+        .build()
+        .expect("agent");
+
+    let scope = SessionScope::new("override-test", RuntimeMode::Paper);
+    let (handle, mut events) = agent.open(SessionSelector::New(scope)).await.expect("open");
+
+    handle
+        .submit_turn(
+            "Use the override",
+            Vec::new(),
+            Some(override_provider.clone() as Arc<dyn tantra_agent_llm::LlmProvider>),
+        )
+        .await
+        .expect("submit");
+
+    let (text, outcome) = drain_until_turn_end(&mut events).await;
+    assert_eq!(outcome, TurnOutcome::Completed);
+    assert_eq!(text, "override answer");
+
+    assert_eq!(override_provider.served_requests().len(), 1);
+    assert!(default.served_requests().is_empty());
+}

@@ -29,7 +29,7 @@ use tantra_core::Decision;
 
 use crate::{
     ChatMessage, ChatRequest, ChatRole, ChatStreamEvent, EventStream, LlmError, LlmProvider,
-    LlmToolCall, StopReason, Usage,
+    LlmToolCall, MessagePart, StopReason, Usage,
 };
 
 /// Common free-tier model name fragments accepted by the guardrail.
@@ -322,6 +322,8 @@ impl LlmProvider for OpenAiCompatibleProvider {
         match feature {
             "tool_calls" => true,
             "json" => self.structured_output,
+            // The OpenAI-compatible multimodal message format supports image content parts.
+            "vision" => true,
             _ => false,
         }
     }
@@ -565,6 +567,10 @@ impl SseState {
 }
 
 /// Map an OpenAI-compatible chat message into the request JSON shape.
+///
+/// Text-only messages keep the plain `"content": "<text>"` string shape; messages carrying
+/// multimodal parts (image attachments) serialize the OpenAI content *array* form:
+/// `[{"type": "text", ...}, {"type": "image_url", "image_url": {"url": "data:<mime>;base64,<data>"}}]`.
 fn openai_message(message: &ChatMessage) -> Value {
     let role = match message.role {
         ChatRole::System => "system",
@@ -572,7 +578,27 @@ fn openai_message(message: &ChatMessage) -> Value {
         ChatRole::Assistant => "assistant",
         ChatRole::Tool => "tool",
     };
-    let mut msg = json!({ "role": role, "content": message.content });
+    let mut msg = json!({ "role": role });
+    if message.parts.is_empty() {
+        msg["content"] = Value::String(message.content.clone());
+    } else {
+        let mut parts: Vec<Value> = Vec::with_capacity(message.parts.len() + 1);
+        parts.push(json!({ "type": "text", "text": message.content }));
+        for part in &message.parts {
+            match part {
+                MessagePart::Text { text } => {
+                    parts.push(json!({ "type": "text", "text": text }));
+                }
+                MessagePart::Image { mime_type, data } => {
+                    parts.push(json!({
+                        "type": "image_url",
+                        "image_url": { "url": format!("data:{mime_type};base64,{data}") },
+                    }));
+                }
+            }
+        }
+        msg["content"] = Value::Array(parts);
+    }
     if !message.tool_calls.is_empty() {
         let calls: Vec<Value> = message
             .tool_calls

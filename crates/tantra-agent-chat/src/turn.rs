@@ -12,7 +12,7 @@ use tokio::sync::{mpsc, oneshot};
 use tantra_agent_core::{PersistedMessage, SessionId, SessionStore, ToolError};
 use tantra_agent_llm::{
     ChatMessage, ChatRequest, ChatRole, ChatStreamEvent, LlmProvider, LlmToolCall, LlmToolResult,
-    StopReason, Usage,
+    MessagePart, StopReason, Usage,
 };
 use tantra_agent_replay::hash_request;
 
@@ -110,6 +110,7 @@ pub async fn run_turn(
     system_prompt: &str,
     mut history: Vec<PersistedMessage>,
     user_input: &str,
+    attachments: Vec<MessagePart>,
     tools: &ToolSet,
     provider: Arc<dyn LlmProvider>,
     store: Arc<dyn SessionStore>,
@@ -122,12 +123,17 @@ pub async fn run_turn(
     let mut current_round = 1u32;
     let mut error_counts: HashMap<String, (String, u32)> = HashMap::new();
 
-    // 1. Write-ahead persist user message
+    // 1. Write-ahead persist user message. Image attachment parts ride along in the message
+    // content (serde `MessagePart` JSON) so resumed sessions replay them faithfully.
     let user_msg_seq = (history.len() as u64) + 1;
     let user_persisted = PersistedMessage {
         seq: user_msg_seq,
         role: "user".to_string(),
-        content: serde_json::json!({ "text": user_input }),
+        content: if attachments.is_empty() {
+            serde_json::json!({ "text": user_input })
+        } else {
+            serde_json::json!({ "text": user_input, "attachments": attachments })
+        },
         request_hash: None,
         input_tokens: None,
         output_tokens: None,
@@ -206,7 +212,17 @@ pub async fn run_turn(
                             content: text,
                             tool_calls: Vec::new(),
                             tool_call_id: None,
+                            parts: Vec::new(),
                         };
+                        if let Some(atts) = pm.content.get("attachments").and_then(|v| v.as_array())
+                        {
+                            for att in atts {
+                                if let Ok(part) = serde_json::from_value::<MessagePart>(att.clone())
+                                {
+                                    msg.parts.push(part);
+                                }
+                            }
+                        }
                         if let Some(tc_array) =
                             pm.content.get("tool_calls").and_then(|v| v.as_array())
                         {
@@ -232,6 +248,30 @@ pub async fn run_turn(
                     temperature: None,
                     max_tokens: None,
                 };
+
+                // Multimodal capability gate: a text-only provider receiving image attachment
+                // parts answers with an explicit, honest capability notice (streamed as text so
+                // it appears in the chat reply) instead of silently dropping the image bytes.
+                if req.has_image_parts() && !provider.supports("vision") {
+                    let notice = format!(
+                        "model {} does not support image attachments",
+                        provider.model_name()
+                    );
+                    let _ = event_tx
+                        .send(SessionEvent::TextDelta {
+                            turn: turn_id,
+                            round,
+                            text: notice.clone(),
+                        })
+                        .await;
+                    turn_state = TurnState::Finished(TurnOutcome::Failed {
+                        error: ChatErrorView {
+                            kind: "capability".into(),
+                            message: notice,
+                        },
+                    });
+                    continue;
+                }
 
                 let stream_res = tokio::select! {
                     _ = cancel_token.cancelled() => {
