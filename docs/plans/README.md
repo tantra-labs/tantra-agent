@@ -14,6 +14,7 @@ Per workspace rule `.agents/rules/gap-tracking.md`:
 | 0012 | Agent Roster Culmination: Prism Insight (13) + Fincept (37) into the Tantra Persona Desk | `tantra-agent-prompt` (persona.rs), `skills/`, playbook `docs/design/agents/0001-guide.md` | Approved Design & Implementation Roadmap — 14-persona desk (9 existing + 5 new) + lenses (6 economic schools, 11 investor mentors, 20 geopolitics modes); docs/design/plan only, no code landed; UI wiring tracked by `tantra-ui` plan 0007 |
 | [0013](0013-screener-mcp-tools.md) | Screener, Universe, Alpha-Alerts & Watchlist MCP Tools | `tantra-agent-mcp`, `tantra-agent-chat-tools` | Proposed (revised 2026-11-16; async ports out of `tantra-agent-tools`) — research `docs/research/trendlyne-screener-alerts-mcp.md`; root plan `docs/plans/0010` (F8) |
 | [0014](0014-real-trade-suggestion-and-trade-plan-mcp.md) | Real Trade Suggestion & `trade_plan` MCP Tools (replace `strategy_suggest` stub) | `tantra-agent-chat-tools`, `tantra-agent-mcp` | Proposed — root plan `docs/plans/0008` |
+| [0016](0016-experimental-analysis-copilot-and-event-news.md) | `Experimental-Analysis` AI Assistant & Historical Outlier News Tools (`experimental_study_summary`, `historical_outlier_news`) | `tantra-agent-chat-tools`, `tantra-agent-mcp` | Proposed (2026-11-18) — Track **T20.4**, root plan [`0014`](../../../docs/plans/0014-experimental-analysis-statistical-workbench.md); depends on `runtime 0009` |
 
 ## Implemented Plans
 
