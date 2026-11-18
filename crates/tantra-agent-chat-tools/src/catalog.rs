@@ -6,6 +6,7 @@ use crate::alert::{PriceAlertListTool, PriceAlertTool};
 use crate::calc::ResearchCalcTool;
 use crate::calendar::EconomicCalendarTool;
 use crate::content::{FilingsSearchTool, NewsSearchTool};
+use crate::experimental_study::{ExperimentalStudySummaryTool, HistoricalOutlierNewsTool};
 use crate::fund::{FundHoldingsTool, FundSearchTool};
 use crate::fundamental::{FinancialStatementsTool, FundamentalsTool};
 use crate::ipo::{IpoCalendarTool, IpoSubscriptionTool};
@@ -28,6 +29,7 @@ use crate::ports::market::MarketReader;
 use crate::ports::portfolio::PortfolioReader;
 use crate::ports::snapshot::SnapshotSource;
 use crate::ports::strategy_store::StrategyStore;
+use crate::ports::study::StudyReader;
 use crate::ports::tax::TaxReportReader;
 use crate::ports::trade_intent::TradeIntentSink;
 use crate::statement::LedgerStatementTool;
@@ -35,11 +37,9 @@ use crate::strategy_manage::StrategyManageTool;
 use crate::tax::TaxReportTool;
 use crate::trade_intent::ProposeTradeTool;
 
-/// Bundle of all 34 Phase B read-only conversational tools (§6.5).
+/// Bundle of all 36 read-only conversational tools (§6.5) with default `study: None`.
 ///
-/// The port set grows one `Arc<dyn ...>` reader per tool category; the flat signature
-/// deliberately mirrors `register_read_only_tools` and is allowed past clippy's
-/// `too_many_arguments` threshold (same precedent as `tantra-agent-chat::turn`).
+/// Use [`create_read_only_tools_with_studies`] to inject a runtime [`StudyReader`].
 #[allow(clippy::too_many_arguments)]
 pub fn create_read_only_tools(
     portfolio: Arc<dyn PortfolioReader>,
@@ -51,6 +51,38 @@ pub fn create_read_only_tools(
     ipo: Arc<dyn IpoReader>,
     tax: Arc<dyn TaxReportReader>,
     snapshots: Option<Arc<dyn SnapshotSource>>,
+) -> Vec<Arc<dyn ChatTool>> {
+    create_read_only_tools_with_studies(
+        portfolio,
+        market,
+        content,
+        calendar,
+        fundamental,
+        fund,
+        ipo,
+        tax,
+        snapshots,
+        None,
+    )
+}
+
+/// Bundle of all 36 Phase B + Experimental-Analysis read-only conversational tools (§6.5).
+///
+/// The port set grows one `Arc<dyn ...>` reader per tool category; the flat signature
+/// deliberately mirrors `register_read_only_tools_with_studies` and is allowed past clippy's
+/// `too_many_arguments` threshold (same precedent as `tantra-agent-chat::turn`).
+#[allow(clippy::too_many_arguments)]
+pub fn create_read_only_tools_with_studies(
+    portfolio: Arc<dyn PortfolioReader>,
+    market: Arc<dyn MarketReader>,
+    content: Arc<dyn ContentReader>,
+    calendar: Arc<dyn CalendarReader>,
+    fundamental: Arc<dyn FundamentalReader>,
+    fund: Arc<dyn FundReader>,
+    ipo: Arc<dyn IpoReader>,
+    tax: Arc<dyn TaxReportReader>,
+    snapshots: Option<Arc<dyn SnapshotSource>>,
+    study: Option<Arc<dyn StudyReader>>,
 ) -> Vec<Arc<dyn ChatTool>> {
     vec![
         // 1. Market tools (10)
@@ -87,11 +119,11 @@ pub fn create_read_only_tools(
         Arc::new(ResearchCalcTool::new()),
         // 5. News & filings content tools (2, plan 0006 Phase 3)
         Arc::new(NewsSearchTool::new(Arc::clone(&content))),
-        Arc::new(FilingsSearchTool::new(content)),
+        Arc::new(FilingsSearchTool::new(Arc::clone(&content))),
         // 6. Plan 0007 Track 2 Phase 4-5 tools (3)
         Arc::new(MarketDepthTool::new(Arc::clone(&market))),
         Arc::new(InstitutionalFlowsTool::new(Arc::clone(&market))),
-        Arc::new(EconomicCalendarTool::new(calendar)),
+        Arc::new(EconomicCalendarTool::new(Arc::clone(&calendar))),
         // 7. Plan 0010 smart-money tools (2)
         Arc::new(DeliveryAnalysisTool::new(Arc::clone(&market))),
         Arc::new(OiBuildupTool::new(market)),
@@ -105,10 +137,13 @@ pub fn create_read_only_tools(
         // 9. Plan 0007 Track 5 tax / statements (2)
         Arc::new(TaxReportTool::new(Arc::clone(&tax))),
         Arc::new(LedgerStatementTool::new(tax)),
+        // 10. Plan 0016 / T20 Experimental-Analysis study & outlier news tools (2)
+        Arc::new(ExperimentalStudySummaryTool::new(study)),
+        Arc::new(HistoricalOutlierNewsTool::new(content, calendar)),
     ]
 }
 
-/// Register all 34 Phase B read-only chat tools into a registry (§6.5).
+/// Register all 36 read-only chat tools into a registry (§6.5) with default `study: None`.
 #[allow(clippy::too_many_arguments)]
 pub fn register_read_only_tools(
     registry: &mut ToolRegistry,
@@ -122,7 +157,8 @@ pub fn register_read_only_tools(
     tax: Arc<dyn TaxReportReader>,
     snapshots: Option<Arc<dyn SnapshotSource>>,
 ) {
-    let tools = create_read_only_tools(
+    register_read_only_tools_with_studies(
+        registry,
         portfolio,
         market,
         content,
@@ -132,6 +168,36 @@ pub fn register_read_only_tools(
         ipo,
         tax,
         snapshots,
+        None,
+    );
+}
+
+/// Register all 36 read-only chat tools into a registry with an optional [`StudyReader`].
+#[allow(clippy::too_many_arguments)]
+pub fn register_read_only_tools_with_studies(
+    registry: &mut ToolRegistry,
+    portfolio: Arc<dyn PortfolioReader>,
+    market: Arc<dyn MarketReader>,
+    content: Arc<dyn ContentReader>,
+    calendar: Arc<dyn CalendarReader>,
+    fundamental: Arc<dyn FundamentalReader>,
+    fund: Arc<dyn FundReader>,
+    ipo: Arc<dyn IpoReader>,
+    tax: Arc<dyn TaxReportReader>,
+    snapshots: Option<Arc<dyn SnapshotSource>>,
+    study: Option<Arc<dyn StudyReader>>,
+) {
+    let tools = create_read_only_tools_with_studies(
+        portfolio,
+        market,
+        content,
+        calendar,
+        fundamental,
+        fund,
+        ipo,
+        tax,
+        snapshots,
+        study,
     );
     registry.register_all(tools);
 }

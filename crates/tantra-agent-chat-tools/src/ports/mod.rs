@@ -13,7 +13,9 @@ pub mod ipo;
 pub mod market;
 pub mod portfolio;
 pub mod snapshot;
+pub mod strategy;
 pub mod strategy_store;
+pub mod study;
 pub mod tax;
 pub mod trade_intent;
 
@@ -31,8 +33,8 @@ pub use market::{
 };
 pub use portfolio::{AccountSummary, DateRange, OrderFilter, PortfolioReader};
 pub use snapshot::{SnapshotData, SnapshotNeeds, SnapshotSource};
+pub use strategy::{DefaultStrategyRunner, StrategyRunner};
 pub use strategy_store::{StrategyParameterSpec, StrategySpec, StrategyStore};
+pub use study::{StudyProbabilityLevel, StudyReader, StudySummarySnapshot};
 pub use tax::{ClosedLotRecord, TaxReportReader};
 pub use trade_intent::{TradeIntent, TradeIntentSink, TradeIntentStatus, intent_notional};
-pub mod strategy;
-pub use strategy::{DefaultStrategyRunner, StrategyRunner};

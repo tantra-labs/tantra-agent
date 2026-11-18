@@ -16,6 +16,7 @@ pub mod calc;
 pub mod calendar;
 pub mod catalog;
 pub mod content;
+pub mod experimental_study;
 pub mod fund;
 pub mod fundamental;
 pub mod ipo;
@@ -37,10 +38,15 @@ pub use calc::{
 };
 pub use calendar::{EconomicCalendarInput, EconomicCalendarTool};
 pub use catalog::{
-    create_alert_tools, create_read_only_tools, create_trade_tools, register_alert_tools,
-    register_read_only_tools, register_trade_tools,
+    create_alert_tools, create_read_only_tools, create_read_only_tools_with_studies,
+    create_trade_tools, register_alert_tools, register_read_only_tools,
+    register_read_only_tools_with_studies, register_trade_tools,
 };
 pub use content::{FilingsSearchInput, FilingsSearchTool, NewsSearchInput, NewsSearchTool};
+pub use experimental_study::{
+    ExperimentalStudySummaryInput, ExperimentalStudySummaryTool, HistoricalOutlierNewsInput,
+    HistoricalOutlierNewsTool,
+};
 pub use fund::{FundHoldingsInput, FundHoldingsTool, FundSearchInput, FundSearchTool};
 pub use fundamental::{
     FinancialStatementsInput, FinancialStatementsTool, FundamentalsInput, FundamentalsTool,
@@ -68,8 +74,8 @@ pub use ports::{
     MarketIndicators, MarketQuote, MarketReader, MutualFundMeta, NewsArticle, OiBuildupSnapshot,
     OptionContract, OptionsChain, OrderFilter, PortError, PortErrorKind, PortfolioReader,
     PriceAlert, SnapshotData, SnapshotNeeds, SnapshotSource, StrategyParameterSpec, StrategySpec,
-    StrategyStore, TaxReportReader, TradeIntent, TradeIntentSink, TradeIntentStatus,
-    intent_notional,
+    StrategyStore, StudyProbabilityLevel, StudyReader, StudySummarySnapshot, TaxReportReader,
+    TradeIntent, TradeIntentSink, TradeIntentStatus, intent_notional,
 };
 pub mod strategy;
 

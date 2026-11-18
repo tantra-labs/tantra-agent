@@ -12,7 +12,9 @@ use tantra_agent_chat_tools::calc::{
     CagrArgs, CalcOperation, MarketSegment, PositionSizingArgs, ResearchCalcInput,
     ResearchCalcTool, ReturnMetricsArgs, StatutoryCostsArgs, TradeSide,
 };
-use tantra_agent_chat_tools::catalog::register_read_only_tools;
+use tantra_agent_chat_tools::catalog::{
+    register_read_only_tools, register_read_only_tools_with_studies,
+};
 use tantra_agent_chat_tools::ports::alert::{AlertReader, AlertStatus, AlertWriter, PriceAlert};
 use tantra_agent_chat_tools::ports::calendar::{
     CalendarReader, EconomicCalendarQuery, EconomicEvent,
@@ -35,6 +37,9 @@ use tantra_agent_chat_tools::ports::portfolio::{
 };
 use tantra_agent_chat_tools::ports::snapshot::{SnapshotData, SnapshotNeeds, SnapshotSource};
 use tantra_agent_chat_tools::ports::strategy_store::{StrategySpec, StrategyStore};
+use tantra_agent_chat_tools::ports::study::{
+    StudyProbabilityLevel, StudyReader, StudySummarySnapshot,
+};
 use tantra_agent_chat_tools::ports::tax::{ClosedLotRecord, TaxReportReader};
 use tantra_agent_chat_tools::ports::trade_intent::{
     TradeIntent, TradeIntentSink, TradeIntentStatus,
@@ -2047,7 +2052,7 @@ async fn test_total_read_only_catalogue_count() {
         None,
     );
     let specs = registry.specs();
-    assert_eq!(specs.len(), 34);
+    assert_eq!(specs.len(), 36);
 
     for spec in &specs {
         let tool = registry.get(&spec.name).unwrap();
@@ -3306,4 +3311,196 @@ async fn test_tax_and_statement_tools() {
             "unavailable tax port must surface as ToolError::Execution, got {err:?}"
         );
     }
+}
+
+
+struct MockStudyReader {
+    fail: bool,
+}
+
+#[async_trait]
+impl StudyReader for MockStudyReader {
+    async fn returns_study_summary(
+        &self,
+        instrument: &InstrumentId,
+        asset_class: Option<&str>,
+        period: Option<&str>,
+        calc_type: Option<&str>,
+        start_date: Option<NaiveDate>,
+        end_date: Option<NaiveDate>,
+    ) -> Result<StudySummarySnapshot, PortError> {
+        if self.fail {
+            return Err(PortError::unavailable("study engine unavailable"));
+        }
+        Ok(StudySummarySnapshot {
+            instrument: instrument.clone(),
+            asset_class: asset_class.unwrap_or("index").to_string(),
+            period_schedule: period.unwrap_or("weekly_expiry").to_string(),
+            calc_type: calc_type.unwrap_or("open_to_close").to_string(),
+            start_date: start_date.unwrap_or_else(|| NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()),
+            end_date: end_date.unwrap_or_else(|| NaiveDate::from_ymd_opt(2025, 10, 1).unwrap()),
+            total_periods: 90,
+            regime_note: Some("NSE Sep 2025 Tue cutover applied".to_string()),
+            avg_return_pct: dec!(0.34),
+            std_dev_pct: dec!(1.42),
+            sharpe_ratio: dec!(0.24),
+            sortino_ratio: dec!(0.36),
+            profit_factor: dec!(1.65),
+            max_gain_pct: dec!(4.15),
+            max_loss_pct: dec!(-3.80),
+            win_rate_pct: dec!(61.11),
+            current_streak_direction: Some("positive".to_string()),
+            current_streak_length: 2,
+            current_streak_return_pct: dec!(1.45),
+            current_markov_state: Some("ShortPositive".to_string()),
+            strongest_next_markov_state: "ShortNegative".to_string(),
+            strongest_next_probability_pct: dec!(58.33),
+            probability_levels: vec![
+                StudyProbabilityLevel {
+                    prob_above_pct: 80,
+                    return_pct: dec!(-1.10),
+                    implied_price: dec!(24725.00),
+                    scenario: "Support / Covered PE".to_string(),
+                },
+                StudyProbabilityLevel {
+                    prob_above_pct: 20,
+                    return_pct: dec!(1.55),
+                    implied_price: dec!(25387.50),
+                    scenario: "Covered Call OTM".to_string(),
+                },
+            ],
+            outlier_90_lower_pct: dec!(-2.25),
+            outlier_90_upper_pct: dec!(2.40),
+            outlier_count: 9,
+            after_big_up_next_avg_pct: Some(dec!(0.18)),
+            after_big_down_next_avg_pct: Some(dec!(0.62)),
+        })
+    }
+}
+
+#[tokio::test]
+async fn test_experimental_study_and_outlier_news_tools() {
+    // 1. Default read-only bundle registers experimental_study_summary + historical_outlier_news,
+    //    and experimental_study_summary returns honest unavailability when StudyReader is None.
+    let mut default_reg = ToolRegistry::new();
+    register_read_only_tools(
+        &mut default_reg,
+        Arc::new(MockPortfolioReader),
+        Arc::new(MockMarketReader { fail_quotes: false }),
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
+        None,
+    );
+    let summary_unwired = default_reg
+        .get("experimental_study_summary")
+        .expect("experimental_study_summary registered");
+    assert_eq!(summary_unwired.traits().risk, ToolRisk::ReadOnly);
+    let err = summary_unwired
+        .execute(
+            serde_json::json!({ "instrument": "NSE:NIFTY50" }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(err, ToolError::Execution(..)));
+
+    // 2. Wired StudyReader returns exact Decimal study summary + Markov probs + strike levels.
+    let mut wired_reg = ToolRegistry::new();
+    register_read_only_tools_with_studies(
+        &mut wired_reg,
+        Arc::new(MockPortfolioReader),
+        Arc::new(MockMarketReader { fail_quotes: false }),
+        Arc::new(MockContentReader {
+            fail_content: false,
+        }),
+        Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
+        None,
+        Some(Arc::new(MockStudyReader { fail: false })),
+    );
+    let summary_tool = wired_reg.get("experimental_study_summary").unwrap();
+    let out = summary_tool
+        .execute(
+            serde_json::json!({
+                "instrument": "NSE:NIFTY50",
+                "asset_class": "index",
+                "period": "weekly_expiry"
+            }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(out.ok);
+    assert_eq!(out.payload["total_periods"], 90);
+    assert_eq!(out.payload["strongest_next_markov_state"], "ShortNegative");
+
+    // 3. historical_outlier_news expands [window_start - 2d, window_end + 1d] and retrieves
+    //    both news and macro calendar events cleanly (and caches identical lookups).
+    let today = Utc::now().date_naive();
+    let w_start = (today - chrono::Duration::days(1)).to_string();
+    let w_end = today.to_string();
+    let news_tool = wired_reg
+        .get("historical_outlier_news")
+        .expect("historical_outlier_news registered");
+    assert_eq!(news_tool.traits().risk, ToolRisk::ReadOnly);
+    let news_out = news_tool
+        .execute(
+            serde_json::json!({
+                "instrument": "NSE:RELIANCE",
+                "asset_class": "fno_stock",
+                "window_start": w_start,
+                "window_end": w_end,
+                "keywords": "results rbi"
+            }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert!(news_out.ok);
+    assert_eq!(news_out.payload["news_archive_available"], true);
+    assert_eq!(news_out.payload["macro_calendar_available"], true);
+    let items = news_out.payload["items"].as_array().unwrap();
+    assert!(items.len() >= 2, "expected news + RBI macro event in expanded window");
+
+    // 4. When news content archive is offline, macro calendar still returns honestly without panic.
+    let mut offline_news_reg = ToolRegistry::new();
+    register_read_only_tools_with_studies(
+        &mut offline_news_reg,
+        Arc::new(MockPortfolioReader),
+        Arc::new(MockMarketReader { fail_quotes: false }),
+        Arc::new(MockContentReader {
+            fail_content: true,
+        }),
+        Arc::new(MockCalendarReader),
+        Arc::new(MockFundamentalReader { fail: false }),
+        Arc::new(MockFundReader { fail: false }),
+        Arc::new(MockIpoReader { fail: false }),
+        Arc::new(MockTaxReportReader { fail: false }),
+        None,
+        None,
+    );
+    let offline_out = offline_news_reg
+        .get("historical_outlier_news")
+        .unwrap()
+        .execute(
+            serde_json::json!({
+                "instrument": "NSE:RELIANCE",
+                "window_start": w_start,
+                "window_end": w_end
+            }),
+            dummy_tool_context(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(offline_out.payload["news_archive_available"], false);
+    assert_eq!(offline_out.payload["macro_calendar_available"], true);
 }
