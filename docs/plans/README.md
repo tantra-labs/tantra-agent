@@ -15,7 +15,7 @@ Per workspace rule `.agents/rules/gap-tracking.md`:
 | [0013](0013-screener-mcp-tools.md) | Screener, Universe, Alpha-Alerts & Watchlist MCP Tools | `tantra-agent-mcp`, `tantra-agent-chat-tools` | Proposed (revised 2026-11-16; async ports out of `tantra-agent-tools`) — research `docs/research/trendlyne-screener-alerts-mcp.md`; root plan `docs/plans/0010` (F8) |
 | [0014](0014-real-trade-suggestion-and-trade-plan-mcp.md) | Real Trade Suggestion & `trade_plan` MCP Tools (replace `strategy_suggest` stub) | `tantra-agent-chat-tools`, `tantra-agent-mcp` | Proposed — root plan `docs/plans/0008` |
 | [0016](0016-experimental-analysis-copilot-and-event-news.md) | `Experimental-Analysis` AI Assistant & Historical Outlier News Tools (`experimental_study_summary`, `historical_outlier_news`) | `tantra-agent-chat-tools`, `tantra-agent-mcp` | Proposed (2026-11-18) — Track **T20.4**, root plan [`0014`](../../../docs/plans/0014-experimental-analysis-statistical-workbench.md); depends on `runtime 0009` |
-| [0017](0017-library-port-and-mcp-tools.md) | Indicator Library Port & MCP Tools (`IndicatorLibraryPort`, `tantra_library_search/describe`, `tantra_indicator_compute`, `tantra_signal_study`; retire `IndicatorCatalog`) | `tantra-agent-core`, `tantra-agent-mcp` | Proposed (2026-11-20) — root plan 0016 / T22.3–T22.4, design only |
+| [0017](0017-library-port-and-mcp-tools.md) | Library Access for Agents & MCP (option a: direct second MCP server; option b: `IndicatorLibraryPort` proxy via runtime `LibraryMcpClient`; keep `get_indicator_catalog`) | `tantra-agent-core`, `tantra-agent-mcp` | Proposed — not wired (2026-11-20); root plan 0016 / T22.7 wiring only; library implemented in `tantra-strategies` plan 0005 |
 
 ## Implemented Plans
 
