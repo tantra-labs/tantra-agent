@@ -10,6 +10,7 @@
 pub mod client;
 pub mod error;
 pub mod frontier;
+pub mod library_http;
 pub mod server;
 pub mod tools;
 pub mod transport;
@@ -19,6 +20,7 @@ pub use error::McpError;
 pub use frontier::{
     AgentManifestPaths, ClaudeDesktopConfig, CursorMcpConfig, GeminiMcpConfig, ManifestGenerator,
 };
+pub use library_http::RuntimeLibraryClient;
 pub use server::{McpServer, RpcError, RpcMessage};
 pub use tools::{
     AllocationToolService, AnalyticsToolService, AssetWeightResult, BacktestDispatcherService,

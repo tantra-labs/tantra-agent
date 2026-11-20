@@ -1,6 +1,6 @@
 # 0017 — Library Access for Agents and MCP (wiring plan)
 
-**Status**: Proposed — not wired (2026-11-20). Parent: root plan 0016 (Track T22.7). The library is implemented
+**Status**: Implemented 2026-11-20 (option (b)). `tantra-agent-mcp` exposes the 4 tools under the same names; the production port is `RuntimeLibraryClient` (`src/library_http.rs`), an HTTP client to the runtime's `/api/v2/studies/*` routes configured via `TANTRA_RUNTIME_URL` / optional `TANTRA_RUNTIME_TOKEN` (bearer). `check_spec` / `get_indicator_catalog` lazily extend the catalog from the library (`IndicatorCatalog::with_library`, 500 entries; static fallback). Option (a) (direct `tantra-library-mcp`) remains available for external MCP clients. Original status: Proposed. Parent: root plan 0016 (Track T22.7). The library is implemented
 in `tantra-strategies` (plan 0005); tools: `tantra_library_search`, `tantra_library_describe`,
 `tantra_indicator_compute`, `tantra_signal_study`.
 

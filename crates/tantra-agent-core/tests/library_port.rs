@@ -184,3 +184,33 @@ async fn malformed_entry_is_skipped_and_count_is_distinct_entries() {
     // predictive-ranges, vidya, reversal-bar, ema (registered as IND.EMA only; static EMA wins)
     assert_eq!(c.library_count(), 4);
 }
+
+struct LimitProbe(std::sync::Mutex<Vec<Option<u32>>>);
+
+#[async_trait::async_trait]
+impl IndicatorLibraryPort for LimitProbe {
+    async fn search(&self, r: LibrarySearchRequest) -> Result<Value, LibraryPortError> {
+        if let Ok(mut seen) = self.0.lock() {
+            seen.push(r.limit);
+        }
+        Ok(json!([]))
+    }
+    async fn describe(&self, r: LibraryDescribeRequest) -> Result<Value, LibraryPortError> {
+        Err(LibraryPortError::not_found(r.id))
+    }
+    async fn compute(&self, _: IndicatorComputeRequest) -> Result<Value, LibraryPortError> {
+        Err(LibraryPortError::unavailable("n/a"))
+    }
+    async fn signal_study(&self, _: SignalStudyRequest) -> Result<Value, LibraryPortError> {
+        Err(LibraryPortError::unavailable("n/a"))
+    }
+}
+
+#[tokio::test]
+async fn search_limit_is_clamped_to_server_cap() {
+    let probe = LimitProbe(std::sync::Mutex::new(Vec::new()));
+    let _ = load_library_descriptors(&probe, 500).await;
+    let seen = probe.0.lock().map(|v| v.clone()).unwrap_or_default();
+    assert!(!seen.is_empty());
+    assert!(seen.iter().all(|l| *l == Some(200)), "{seen:?}");
+}

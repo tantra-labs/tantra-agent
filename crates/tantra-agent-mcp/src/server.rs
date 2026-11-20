@@ -2,6 +2,13 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::sync::Arc;
+use tantra_agent_core::indicators::IndicatorCatalog as CoreIndicatorCatalog;
+use tantra_agent_core::library::{
+    IndicatorComputeRequest, IndicatorLibraryPort, LibraryDescribeRequest, LibrarySearchRequest,
+    SignalStudyRequest,
+};
+use tokio::sync::OnceCell;
 
 use crate::error::McpError;
 use crate::tools::{
@@ -107,6 +114,10 @@ pub struct McpServer {
     /// Ephemeral data reference store (`$tantra/ref/<uuid>`) for chaining
     /// large time-series between tools without token roundtrips.
     pub data_store: DataReferenceStore,
+    /// Optional indicator library port (HTTP client to the runtime in production).
+    library: Option<Arc<dyn IndicatorLibraryPort>>,
+    /// Lazily built library-extended catalog (populated on first use when a port is set).
+    library_catalog: OnceCell<CoreIndicatorCatalog>,
 }
 
 impl Default for McpServer {
@@ -132,7 +143,71 @@ impl McpServer {
             volatility: VolatilityToolService::new(),
             regime: RegimeToolService::new(),
             data_store: DataReferenceStore::new(),
+            library: None,
+            library_catalog: OnceCell::new(),
         }
+    }
+
+    /// Attach an indicator library port enabling the library tools and library-backed
+    /// spec validation.
+    pub fn with_library_port(mut self, port: Arc<dyn IndicatorLibraryPort>) -> Self {
+        self.library = Some(port);
+        self
+    }
+
+    async fn library_catalog(&self) -> Option<&CoreIndicatorCatalog> {
+        let port = self.library.as_ref()?;
+        Some(
+            self.library_catalog
+                .get_or_init(|| CoreIndicatorCatalog::with_library(port.as_ref(), 500))
+                .await,
+        )
+    }
+
+    fn library_port(&self) -> Result<&Arc<dyn IndicatorLibraryPort>, McpError> {
+        self.library.as_ref().ok_or_else(|| {
+            McpError::Unavailable(
+                "indicator library not configured (set TANTRA_RUNTIME_URL)".to_string(),
+            )
+        })
+    }
+
+    async fn call_library_tool(
+        &self,
+        name: &str,
+        arguments: serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
+        let port = self.library_port()?;
+        let bad = |e: serde_json::Error| McpError::InvalidArguments(e.to_string());
+        let result = match name {
+            "tantra_library_search" => {
+                let req: LibrarySearchRequest = serde_json::from_value(arguments).map_err(bad)?;
+                if matches!(req.limit, Some(l) if l == 0 || l > 200) {
+                    return Err(McpError::InvalidArguments(
+                        "limit must be within 1..=200".to_string(),
+                    ));
+                }
+                port.search(req).await
+            }
+            "tantra_library_describe" => {
+                let req: LibraryDescribeRequest = serde_json::from_value(arguments).map_err(bad)?;
+                port.describe(req).await
+            }
+            "tantra_indicator_compute" => {
+                let req: IndicatorComputeRequest =
+                    serde_json::from_value(arguments).map_err(bad)?;
+                req.validate().map_err(McpError::from)?;
+                port.compute(req).await
+            }
+            _ => {
+                let req: SignalStudyRequest = serde_json::from_value(arguments).map_err(bad)?;
+                req.validate().map_err(McpError::from)?;
+                port.signal_study(req).await
+            }
+        };
+        let data = result.map_err(McpError::from)?;
+        let envelope = TantraResultEnvelope::ok(name.to_string(), data);
+        serde_json::to_value(envelope).map_err(McpError::Json)
     }
 
     /// Handle an incoming JSON-RPC 2.0 message and generate a response.
@@ -260,12 +335,22 @@ impl McpServer {
         arguments: serde_json::Value,
     ) -> Result<serde_json::Value, McpError> {
         let data = match name {
-            "get_indicator_catalog" => self.indicator_catalog.get_catalog_json(),
+            "tantra_library_search"
+            | "tantra_library_describe"
+            | "tantra_indicator_compute"
+            | "tantra_signal_study" => return self.call_library_tool(name, arguments).await,
+            "get_indicator_catalog" => match self.library_catalog().await {
+                Some(c) => self.indicator_catalog.get_catalog_json_with(c),
+                None => self.indicator_catalog.get_catalog_json(),
+            },
             "check_spec" => {
                 let sm = arguments.get("strategy_manifest").ok_or_else(|| {
                     McpError::InvalidArguments("missing strategy_manifest".to_string())
                 })?;
-                self.spec_validator.validate(sm)?
+                match self.library_catalog().await {
+                    Some(c) => self.spec_validator.validate_with(c, sm)?,
+                    None => self.spec_validator.validate(sm)?,
+                }
             }
             "run_backtest" => {
                 let sm = arguments.get("strategy_manifest").ok_or_else(|| {

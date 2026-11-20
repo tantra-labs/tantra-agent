@@ -27,6 +27,26 @@ pub enum McpError {
     #[error("Indicator catalog error: {0}")]
     IndicatorError(String),
 
+    /// Indicator library not configured or unreachable
+    #[error("Library unavailable: {0}")]
+    Unavailable(String),
+
+    /// Indicator library is busy
+    #[error("Library busy: {0}")]
+    Busy(String),
+
+    /// Indicator library call timed out
+    #[error("Library timeout: {0}")]
+    Timeout(String),
+
+    /// Library entry not found
+    #[error("Not found: {0}")]
+    NotFound(String),
+
+    /// Upstream library error
+    #[error("Upstream library error: {0}")]
+    Upstream(String),
+
     /// Internal error
     #[error("Internal error: {0}")]
     Internal(String),
@@ -42,4 +62,18 @@ pub enum McpError {
     /// IO error
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+}
+
+impl From<tantra_agent_core::library::LibraryPortError> for McpError {
+    fn from(e: tantra_agent_core::library::LibraryPortError) -> Self {
+        use tantra_agent_core::library::LibraryPortErrorKind as K;
+        match e.kind {
+            K::Unavailable => McpError::Unavailable(e.message),
+            K::InvalidRequest => McpError::InvalidArguments(e.message),
+            K::NotFound => McpError::NotFound(e.message),
+            K::Busy => McpError::Busy(e.message),
+            K::Timeout => McpError::Timeout(e.message),
+            K::Upstream => McpError::Upstream(e.message),
+        }
+    }
 }

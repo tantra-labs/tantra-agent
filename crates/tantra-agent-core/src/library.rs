@@ -414,7 +414,8 @@ pub async fn load_library_descriptors(
     if max_entries == 0 {
         return Ok(out);
     }
-    let limit = u32::try_from(max_entries).unwrap_or(u32::MAX);
+    // The library server caps `limit` at 200 per search call.
+    let limit = u32::try_from(max_entries.min(200)).unwrap_or(200);
     for kind in ["indicator", "composite", "detector", "primitive"] {
         let found = port
             .search(LibrarySearchRequest {

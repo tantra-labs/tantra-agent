@@ -26,6 +26,8 @@ tantra-agent-llm = { path = "../tantra-agent-llm" }
 tantra-agent-forecast = { path = "../tantra-agent-forecast" }
 uuid.workspace = true
 bytes = "1.4"
+reqwest.workspace = true
+async-trait.workspace = true
 rand = "0.8"
 
 [dev-dependencies]
