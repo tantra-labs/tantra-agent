@@ -3313,7 +3313,6 @@ async fn test_tax_and_statement_tools() {
     }
 }
 
-
 struct MockStudyReader {
     fail: bool,
 }
@@ -3469,7 +3468,10 @@ async fn test_experimental_study_and_outlier_news_tools() {
     assert_eq!(news_out.payload["news_archive_available"], true);
     assert_eq!(news_out.payload["macro_calendar_available"], true);
     let items = news_out.payload["items"].as_array().unwrap();
-    assert!(items.len() >= 2, "expected news + RBI macro event in expanded window");
+    assert!(
+        items.len() >= 2,
+        "expected news + RBI macro event in expanded window"
+    );
 
     // 4. When news content archive is offline, macro calendar still returns honestly without panic.
     let mut offline_news_reg = ToolRegistry::new();
@@ -3477,9 +3479,7 @@ async fn test_experimental_study_and_outlier_news_tools() {
         &mut offline_news_reg,
         Arc::new(MockPortfolioReader),
         Arc::new(MockMarketReader { fail_quotes: false }),
-        Arc::new(MockContentReader {
-            fail_content: true,
-        }),
+        Arc::new(MockContentReader { fail_content: true }),
         Arc::new(MockCalendarReader),
         Arc::new(MockFundamentalReader { fail: false }),
         Arc::new(MockFundReader { fail: false }),
