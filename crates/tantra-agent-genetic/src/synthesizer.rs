@@ -75,6 +75,11 @@ impl HybridAutoSynthesizer {
         }
     }
 
+    /// Create a synthesizer using a caller-supplied (e.g. library-backed) catalog.
+    pub fn with_catalog(config: AutoSynthesizerConfig, catalog: IndicatorCatalog) -> Self {
+        Self { config, catalog }
+    }
+
     /// Generate an initial population of rule trees constrained to LLM selected indicator families.
     pub fn generate_initial_population<R: Rng>(
         &self,

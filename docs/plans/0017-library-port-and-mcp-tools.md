@@ -32,3 +32,8 @@ process); (a) for external clients (Claude Desktop, IDEs).
 Contract tests with a fake `IndicatorLibraryPort`; schema-snapshot of the 4 tool definitions; negative tests
 for out-of-range params; `tantra-agent-chat/tests/dependency_rules.rs` must stay green (R1-R4 unweakened).
 Gates: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `make check`, `make test`, `make prod`.
+
+## Progress
+
+- 2026-11-20: done in `tantra-agent-core` — `IndicatorLibraryPort`, request DTOs with caps, `LibraryPortError`, descriptor loader, and dynamic `IndicatorCatalog::with_library` (static entries win; static fallback when unavailable). `with_catalog` injection on `HypothesisGenerator`, `ClosedGrammarMutator`, `HybridAutoSynthesizer`.
+- Remaining: MCP proxy tools and an HTTP port implementation targeting runtime `/api/v2/studies/*`.

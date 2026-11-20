@@ -22,6 +22,7 @@ pub mod error;
 pub mod indicators;
 pub mod jobs;
 pub mod jq;
+pub mod library;
 pub mod memory;
 pub mod ports;
 pub mod prompt;

@@ -81,6 +81,11 @@ impl HypothesisGenerator {
         }
     }
 
+    /// Create a generator using a caller-supplied (e.g. library-backed) catalog.
+    pub fn with_catalog(catalog: IndicatorCatalog) -> Self {
+        Self { catalog }
+    }
+
     /// Access the underlying indicator catalog.
     pub fn catalog(&self) -> &IndicatorCatalog {
         &self.catalog

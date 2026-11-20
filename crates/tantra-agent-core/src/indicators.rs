@@ -12,6 +12,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::error::CatalogError;
+use crate::library::{IndicatorLibraryPort, LibraryIndicatorDescriptor, load_library_descriptors};
 
 /// Categories of verified indicators.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
@@ -25,6 +26,8 @@ pub enum IndicatorCategory {
     IndianMicrostructure,
     /// Volatility and Trend strength indicators
     VolatilityTrend,
+    /// Dynamically loaded from an external indicator library
+    Library,
 }
 
 /// Specification for an approved indicator parameter.
@@ -321,6 +324,53 @@ impl IndicatorCatalog {
 
         Self {
             indicators: catalog,
+        }
+    }
+
+    /// Add library-provided descriptors. Static entries are never overridden.
+    pub fn with_library_descriptors(
+        mut self,
+        descriptors: impl IntoIterator<Item = LibraryIndicatorDescriptor>,
+    ) -> Self {
+        for d in descriptors {
+            let spec = IndicatorSpec {
+                name: d.id.to_uppercase(),
+                category: IndicatorCategory::Library,
+                description: d.title.clone(),
+                parameters: d.numeric_params.clone(),
+            };
+            let mut keys = vec![d.id.to_uppercase()];
+            if let Some((_, short)) = d.id.split_once('.') {
+                keys.push(short.to_uppercase());
+            }
+            keys.extend(d.aliases.iter().map(|a| a.to_uppercase()));
+            for key in keys {
+                self.indicators.entry(key).or_insert_with(|| spec.clone());
+            }
+        }
+        self
+    }
+
+    /// Number of library-provided specs (distinct keys).
+    /// Number of distinct library entries (an entry registered under its id, short name
+    /// and aliases counts once).
+    pub fn library_count(&self) -> usize {
+        self.indicators
+            .values()
+            .filter(|s| s.category == IndicatorCategory::Library)
+            .map(|s| s.name.as_str())
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+    }
+
+    /// Static catalog plus library descriptors; falls back to static on any failure.
+    pub async fn with_library(port: &dyn IndicatorLibraryPort, max_entries: usize) -> Self {
+        match load_library_descriptors(port, max_entries).await {
+            Ok(d) => Self::new().with_library_descriptors(d),
+            Err(e) => {
+                tracing::warn!(error = %e, "indicator library unavailable; using static catalog");
+                Self::new()
+            }
         }
     }
 

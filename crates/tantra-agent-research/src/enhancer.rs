@@ -420,6 +420,11 @@ impl ClosedGrammarMutator {
         }
     }
 
+    /// Create a mutator using a caller-supplied (e.g. library-backed) catalog.
+    pub fn with_catalog(catalog: IndicatorCatalog) -> Self {
+        Self { catalog }
+    }
+
     /// Selects approved filter indicator and mutates StrategySpec adhering to IndicatorCatalog.
     pub fn mutate_spec(
         &self,
