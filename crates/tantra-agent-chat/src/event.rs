@@ -2,7 +2,7 @@
 
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use tantra_agent_core::{MessageSeq, SessionId, SessionScope};
+use tantra_agent_core::{DisplayBlock, MessageSeq, SessionId, SessionScope};
 use tantra_agent_llm::{StopReason, Usage};
 
 use crate::error::ChatErrorView;
@@ -323,5 +323,25 @@ pub enum SessionEvent {
         elapsed_ms: u64,
         /// Optional UI display payload.
         display: Option<ToolDisplay>,
+        /// Typed presentation blocks from the tool's `tantra/result/v1` envelope
+        /// (tables, metric grids, charts, alerts, overlay scenes), for UI rendering only.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        blocks: Vec<DisplayBlock>,
     },
+}
+
+/// Extract the typed presentation blocks from a tool payload that is a serialized
+/// `tantra/result/v1` envelope. Non-envelope payloads yield no blocks; individual
+/// malformed blocks are skipped (tool output is untrusted runtime data).
+pub fn display_blocks_from_payload(payload: &serde_json::Value) -> Vec<DisplayBlock> {
+    payload
+        .get("blocks")
+        .and_then(serde_json::Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|b| serde_json::from_value::<DisplayBlock>(b.clone()).ok())
+                .collect()
+        })
+        .unwrap_or_default()
 }

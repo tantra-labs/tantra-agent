@@ -561,6 +561,7 @@ pub async fn run_turn(
                                 outcome: ToolOutcome::Error(err_msg.clone()),
                                 elapsed_ms: 0,
                                 display: None,
+                                blocks: Vec::new(),
                             })
                             .await;
 
@@ -626,6 +627,7 @@ pub async fn run_turn(
                                                 outcome: ToolOutcome::Denied(reason.clone()),
                                                 elapsed_ms: 0,
                                                 display: None,
+                                                blocks: Vec::new(),
                                             })
                                             .await;
 
@@ -651,6 +653,7 @@ pub async fn run_turn(
                                                 ),
                                                 elapsed_ms: 0,
                                                 display: None,
+                                                blocks: Vec::new(),
                                             })
                                             .await;
 
@@ -677,6 +680,7 @@ pub async fn run_turn(
                                 outcome: ToolOutcome::Denied("Not allowed by policy".into()),
                                 elapsed_ms: 0,
                                 display: None,
+                                blocks: Vec::new(),
                             })
                             .await;
 
@@ -755,6 +759,9 @@ pub async fn run_turn(
                                     outcome,
                                     elapsed_ms,
                                     display: Some(ToolDisplay::Text(payload_str.clone())),
+                                    blocks: crate::event::display_blocks_from_payload(
+                                        &output.payload,
+                                    ),
                                 })
                                 .await;
 
@@ -791,6 +798,7 @@ This tool has failed repeatedly; stop retrying and tell the user.",
                                     outcome: ToolOutcome::Error(err_str.clone()),
                                     elapsed_ms,
                                     display: None,
+                                    blocks: Vec::new(),
                                 })
                                 .await;
 
