@@ -17,7 +17,7 @@ use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use shimmytok::Tokenizer;
+use shimmytok::{EncodeOptions, Tokenizer};
 use tokio::sync::{Mutex, mpsc};
 use tokio::task;
 
@@ -184,11 +184,56 @@ impl CandleGgufConfig {
     }
 }
 
+/// System prompt used when a request carries none.
+const DEFAULT_SYSTEM_PROMPT: &str = "You are Tantra, an intelligent quantitative finance and algorithmic trading assistant for Indian equities (NSE/BSE). You provide clear, insightful, disciplined financial and algorithmic trading analysis.";
+
+/// Tokens of trailing context the repeat penalty looks back over.
+const REPEAT_LAST_N: usize = 64;
+
 /// An in-process loaded quantized model.
 struct LoadedModel {
     weights: ModelWeights,
     tokenizer: Tokenizer,
     device: Device,
+    template: ChatTemplate,
+}
+
+/// The chat prompt format a GGUF model was trained on, detected from the model's own
+/// `tokenizer.chat_template` metadata.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChatTemplate {
+    /// `<|im_start|>role\n…<|im_end|>` (Qwen, SmolLM2, …). The fallback.
+    ChatMl,
+    /// `<|start_header_id|>role<|end_header_id|>\n\n…<|eot_id|>` (Llama 3.x and fine-tunes).
+    Llama3,
+}
+
+impl ChatTemplate {
+    /// Detect the template from a GGUF `tokenizer.chat_template` string.
+    pub fn detect(chat_template: Option<&str>) -> Self {
+        match chat_template {
+            Some(t) if t.contains("<|start_header_id|>") => Self::Llama3,
+            _ => Self::ChatMl,
+        }
+    }
+}
+
+/// Encode a formatted chat prompt: control markers such as `<|eot_id|>` become their
+/// single special tokens (not literal text). Llama-3 prompts start with exactly one BOS
+/// (`<|begin_of_text|>`), which this tokenizer does not add on its own.
+pub fn encode_prompt(
+    tokenizer: &Tokenizer,
+    template: ChatTemplate,
+    prompt: &str,
+) -> Result<Vec<u32>, LlmError> {
+    let mut ids = tokenizer
+        .encode_with_options(prompt, &EncodeOptions::with_parse_special(true, true))
+        .map_err(|e| LlmError::Transport(format!("Tokenizer encode error: {e:?}")))?;
+    let bos = tokenizer.bos_token();
+    if template == ChatTemplate::Llama3 && ids.first() != Some(&bos) {
+        ids.insert(0, bos);
+    }
+    Ok(ids)
 }
 
 impl LoadedModel {
@@ -276,10 +321,12 @@ impl LoadedModel {
             ))
         })?;
 
+        let template = ChatTemplate::detect(tokenizer.chat_template());
         Ok(Self {
             weights,
             tokenizer,
             device,
+            template,
         })
     }
 }
@@ -326,11 +373,22 @@ impl CandleGgufProvider {
         Self::new(CandleGgufConfig::new(path))
     }
 
-    /// Format chat messages into prompt string.
+    /// Format chat messages into a ChatML prompt string.
     pub fn format_prompt(messages: &[ChatMessage], system_prompt: Option<&str>) -> String {
+        Self::format_prompt_for(ChatTemplate::ChatMl, messages, system_prompt)
+    }
+
+    /// Format chat messages in the given model template.
+    pub fn format_prompt_for(
+        template: ChatTemplate,
+        messages: &[ChatMessage],
+        system_prompt: Option<&str>,
+    ) -> String {
+        if template == ChatTemplate::Llama3 {
+            return Self::format_llama3(messages, system_prompt);
+        }
         let mut prompt = String::new();
-        let default_sys = "You are Tantra, an intelligent quantitative finance and algorithmic trading assistant for Indian equities (NSE/BSE). You provide clear, insightful, disciplined financial and algorithmic trading analysis.";
-        let sys = system_prompt.unwrap_or(default_sys);
+        let sys = system_prompt.unwrap_or(DEFAULT_SYSTEM_PROMPT);
         if !sys.trim().is_empty() {
             prompt.push_str("<|im_start|>system\n");
             prompt.push_str(sys.trim());
@@ -350,6 +408,32 @@ impl CandleGgufProvider {
         }
 
         prompt.push_str("<|im_start|>assistant\n");
+        prompt
+    }
+
+    fn format_llama3(messages: &[ChatMessage], system_prompt: Option<&str>) -> String {
+        fn turn(prompt: &mut String, role: &str, content: &str) {
+            prompt.push_str("<|start_header_id|>");
+            prompt.push_str(role);
+            prompt.push_str("<|end_header_id|>\n\n");
+            prompt.push_str(content.trim());
+            prompt.push_str("<|eot_id|>");
+        }
+        let mut prompt = String::new();
+        let sys = system_prompt.unwrap_or(DEFAULT_SYSTEM_PROMPT);
+        if !sys.trim().is_empty() {
+            turn(&mut prompt, "system", sys);
+        }
+        for msg in messages {
+            let role = match msg.role {
+                ChatRole::System => "system",
+                ChatRole::User => "user",
+                ChatRole::Assistant => "assistant",
+                ChatRole::Tool => "ipython",
+            };
+            turn(&mut prompt, role, &msg.content);
+        }
+        prompt.push_str("<|start_header_id|>assistant<|end_header_id|>\n\n");
         prompt
     }
 
@@ -496,7 +580,8 @@ impl LlmProvider for CandleGgufProvider {
                 self.config.model_name
             )));
         }
-        let prompt = Self::format_prompt(&request.messages, request.system_prompt.as_deref());
+        let messages = request.messages.clone();
+        let system_prompt = request.system_prompt.clone();
         let (tx, rx) = mpsc::channel(64);
 
         let config = self.config.clone();
@@ -519,10 +604,10 @@ impl LlmProvider for CandleGgufProvider {
                 let loaded = guard.as_mut().expect("loaded model present");
                 loaded.weights.clear_kv_cache();
 
-                let prompt_tokens = loaded
-                    .tokenizer
-                    .encode(&prompt, true)
-                    .map_err(|e| LlmError::Transport(format!("Tokenizer encode error: {e:?}")))?;
+                // The prompt is formatted in the loaded model's own chat template.
+                let prompt =
+                    Self::format_prompt_for(loaded.template, &messages, system_prompt.as_deref());
+                let prompt_tokens = encode_prompt(&loaded.tokenizer, loaded.template, &prompt)?;
 
                 if prompt_tokens.is_empty() {
                     return Err(LlmError::Transport(
@@ -554,6 +639,9 @@ impl LlmProvider for CandleGgufProvider {
                     .squeeze(0)
                     .map_err(|e| LlmError::Transport(format!("Logits extraction error: {e}")))?;
 
+                let mut context: Vec<u32> = prompt_tokens.clone();
+                let last_logits =
+                    apply_repeat_penalty(&last_logits, config.repeat_penalty, &context)?;
                 let mut next_token = logits_processor
                     .sample(&last_logits)
                     .map_err(|e| LlmError::Transport(format!("Sampling error: {e}")))?;
@@ -591,6 +679,7 @@ impl LlmProvider for CandleGgufProvider {
                     }
 
                     generated_tokens.push(next_token);
+                    context.push(next_token);
                     generated_text.push_str(&piece);
 
                     if generated_text.contains("<|im_end|>")
@@ -627,6 +716,8 @@ impl LlmProvider for CandleGgufProvider {
                             LlmError::Transport(format!("KV logits squeeze error: {e}"))
                         })?;
 
+                    let sampled_logits =
+                        apply_repeat_penalty(&sampled_logits, config.repeat_penalty, &context)?;
                     next_token = logits_processor.sample(&sampled_logits).map_err(|e| {
                         LlmError::Transport(format!("Autoregressive sample error: {e}"))
                     })?;
@@ -668,4 +759,19 @@ impl LlmProvider for CandleGgufProvider {
         });
         Ok(Box::pin(stream))
     }
+}
+
+/// Penalise tokens seen in the last [`REPEAT_LAST_N`] context tokens (the configured
+/// `repeat_penalty`; 1.0 disables it). Without it small models loop on a phrase.
+fn apply_repeat_penalty(
+    logits: &Tensor,
+    penalty: f32,
+    context: &[u32],
+) -> Result<Tensor, LlmError> {
+    if (penalty - 1.0).abs() < f32::EPSILON {
+        return Ok(logits.clone());
+    }
+    let start = context.len().saturating_sub(REPEAT_LAST_N);
+    candle_transformers::utils::apply_repeat_penalty(logits, penalty, &context[start..])
+        .map_err(|e| LlmError::Transport(format!("Repeat penalty error: {e}")))
 }
