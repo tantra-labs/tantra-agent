@@ -95,8 +95,12 @@ pub enum ToolOutcome {
 }
 
 /// Rich display formatting for UI presentation (never sent to model).
+///
+/// Adjacently tagged (`{"kind": "text", "value": ...}`): an internally tagged enum cannot
+/// serialize the `Text(String)` newtype, which silently dropped every successful
+/// `tool_finished` event from the WS stream.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
 pub enum ToolDisplay {
     /// Formatted text.
     Text(String),
