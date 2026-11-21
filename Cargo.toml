@@ -18,6 +18,7 @@ members = [
   "crates/tantra-agent-chat-tools",
   "crates/tantra-agent-forecast",
   "crates/tantra-agent-panel",
+  "crates/tantra-agent-acp",
 ]
 
 [workspace.package]
@@ -46,6 +47,7 @@ tantra-agent-chat = { path = "crates/tantra-agent-chat" }
 tantra-agent-chat-tools = { path = "crates/tantra-agent-chat-tools" }
 tantra-agent-forecast = { path = "crates/tantra-agent-forecast" }
 tantra-agent-panel = { path = "crates/tantra-agent-panel" }
+tantra-agent-acp = { path = "crates/tantra-agent-acp" }
 tantra-core = { path = "../tantra-core" }
 tantra-risk = { path = "../tantra-risk" }
 tantra-ledger = { path = "../tantra-ledger/crates/tantra-ledger" }
@@ -91,6 +93,8 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 async-trait = "0.1"
 futures = "0.3"
+agent-client-protocol = "=5.0.0"
+tokio-util = { version = "0.7", features = ["compat"] }
 uuid = { version = "1", features = ["v4", "v7", "serde"] }
 sqlx = { version = "0.8", features = ["time", "sqlite", "chrono", "uuid", "macros", "migrate"] }
 anyhow = "1"

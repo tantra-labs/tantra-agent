@@ -1,0 +1,31 @@
+[package]
+name = "tantra-agent-acp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Serves the Tantra chat agent over ACP (Agent Client Protocol) and provides a Rust ACP client"
+
+[lib]
+name = "tantra_agent_acp"
+
+[[bin]]
+name = "tantra-acp"
+path = "src/bin/tantra-acp.rs"
+
+[dependencies]
+tantra-agent-chat = { workspace = true }
+tantra-agent-core = { workspace = true }
+tantra-agent-llm = { workspace = true }
+tantra-agent-chat-tools = { workspace = true }
+agent-client-protocol = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+futures = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
