@@ -1,6 +1,6 @@
 # 0019 — One agent protocol for TUI, web and CLI/Python SDK (ACP + Tantra extensions)
 
-**Status**: Ready for Implementation
+**Status**: In progress. Phases 0–2 done; Phase 3 done for the TUI (`tantra ask` remaining); Phases 4–6 open.
 
 ## 0. Executive Summary & Objective
 
@@ -76,8 +76,22 @@ In embedded mode the client process *is* the host, so `--config` and `--model` c
   scoping (sessions keyed by `(caller_id, workspace)`); `ModelCatalog` backed by the existing
   chat provider registry; SQLx `SessionStore`; bounded frame size and per-socket session cap.
 - `/ws/chat` kept as a deprecated shim until Phase 4 lands, then removed.
+- **Done 2026-11-21** (runtime `756d267`): `acp_ws_handler` on `/v1/acp` (Authenticated scope,
+  `Caller` extracted), full chat tool set + `present_view` (agent plan 0020), host system prompt
+  appends `PRESENT_VIEW_GUIDANCE`, 64-connection semaphore, 1 MiB frames, 256 KiB duplex bridge.
+  **Deviations / follow-ups**:
+  - The `SessionStore` isn't namespaced by `caller_id`. Isolation instead comes from per-connection
+    sessions with `loadSession: false`; caller-keyed resume is a follow-up.
+  - On disconnect the bridge aborts its tasks without draining output that's still buffered.
 
 ### Phase 3 — TUI + CLI (`tantra-ui`)
+- **Done 2026-11-21 (TUI)**:
+  - The TUI runs agent turns over `AcpClient` (ui `86d35ee`). It's embedded by default via
+    `connect_embedded`; `--server ws://…/v1/acp [--token-file PATH]` connects remotely via the new
+    `connect_ws` (agent `c91301a`; rustls, 1 MiB frames, bearer header). No `TANTRA_SERVER` env var.
+  - `/model` lists or switches models. `/auto` toggles a shared `ClientOptions.approve` flag
+    without reconnecting. `/new` and Ctrl+N reconnect to start a fresh session.
+  - **Remaining**: `tantra ask` still calls `run_turn` directly.
 - TUI swaps its direct `run_turn` for `AcpClient`: embedded by default, `--server URL` /
   `TANTRA_SERVER` for remote; `--model` flag + `/model` palette command (lists
   `_meta.tantra.models`). Analysis page reads `_meta.tantra.blocks`.

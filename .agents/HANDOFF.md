@@ -2,6 +2,12 @@
 
 **Date**: 2026-11-14 · Repo: `tantra-agent` · Branch: `main`
 
+## Latest Batch (2026-11-21)
+- Plan 0020 `present_view` landed in `9859f6f`: `DisplayBlock::View`, `ViewKind`, `PresentViewTool`, MCP `present_view`.
+- Plan 0019: `connect_ws` and the `ClientOptions.approve` flag landed in `c91301a`.
+- Plan 0019 Phase 2 (runtime `756d267`) and Phase 3 for the TUI (ui `86d35ee`) are done.
+- Next: `tantra ask` on `AcpClient`, then Phases 4–6.
+
 ## Phase / Slice Status
 
 - **T17.2 (runtime gap 0009 — multimodal chat plumbing, 2026-11-17)**: `tantra-agent-llm`
