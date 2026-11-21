@@ -12,7 +12,7 @@
 use std::sync::Arc;
 
 use rust_decimal_macros::dec;
-use tantra_agent_llm::openai_provider_from_env;
+use tantra_agent_llm::{ConfigCatalog, LlmProvider, ModelCatalog, load_config};
 use tantra_agent_research::enhancer::FailureRegimeDiagnostic;
 use tantra_agent_research::{MarketRegime, ResearchLlm};
 
@@ -31,10 +31,31 @@ fn mean_reversion_diagnostic() -> FailureRegimeDiagnostic {
     }
 }
 
+fn load_provider() -> Option<Arc<dyn LlmProvider>> {
+    let loaded = match load_config(None) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("skipping: {e}");
+            return None;
+        }
+    };
+    let catalog = match ConfigCatalog::build(&loaded, &|k| std::env::var(k).ok()) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("skipping: {e}");
+            return None;
+        }
+    };
+    catalog.provider(&catalog.default_model()).ok()
+}
+
 #[tokio::test]
-#[ignore = "requires a running OmniRoute router and TANTRA_LLM_* env vars"]
+#[ignore = "requires a running gateway and a tantra.jsonc config"]
 async fn test_research_llm_suggestion_against_omniroute() {
-    let provider = Arc::new(openai_provider_from_env().expect("TANTRA_LLM_* env vars"));
+    let provider = match load_provider() {
+        Some(p) => p,
+        None => return,
+    };
     let research_llm = ResearchLlm::new(provider);
 
     let diagnostic = mean_reversion_diagnostic();

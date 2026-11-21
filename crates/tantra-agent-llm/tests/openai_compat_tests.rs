@@ -12,7 +12,7 @@ use serde_json::Value;
 
 use tantra_agent_llm::{
     ChatMessage, ChatRequest, ChatStreamEvent, FreeTierPolicy, LlmProvider,
-    OpenAiCompatibleProvider, Usage, llm_config_from_map,
+    OpenAiCompatibleProvider, Usage,
 };
 use tantra_core::Decision;
 
@@ -293,25 +293,4 @@ async fn test_chat_stream_serializes_multimodal_image_parts() {
         }
     }
     assert!(text.contains("bullish engulfing"));
-}
-
-#[test]
-fn test_llm_config_from_map_resolves_env() {
-    let env = |key: &str| match key {
-        "TANTRA_LLM_BASE_URL" => Some("http://localhost:8080/v1".to_string()),
-        "TANTRA_LLM_MODEL" => Some("gpt-4o-mini".to_string()),
-        "TANTRA_LLM_API_KEY" => Some("secret".to_string()),
-        _ => None,
-    };
-    let config = llm_config_from_map(&env).expect("resolve");
-    assert_eq!(config.base_url, "http://localhost:8080/v1");
-    assert_eq!(config.model, "gpt-4o-mini");
-    assert_eq!(config.api_key.as_deref(), Some("secret"));
-}
-
-#[test]
-fn test_llm_config_from_map_requires_base_url() {
-    let env = |_key: &str| None;
-    let err = llm_config_from_map(&env).expect_err("missing base url");
-    assert!(err.to_string().contains("TANTRA_LLM_BASE_URL"));
 }

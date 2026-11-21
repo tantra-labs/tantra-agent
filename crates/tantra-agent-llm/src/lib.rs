@@ -22,14 +22,16 @@ use thiserror::Error;
 use tantra_agent_core::ToolSpec;
 use tantra_core::Decision;
 
-pub mod candle_gguf;
-pub mod config;
-pub mod format;
+pub mod catalog;
 pub mod openai_compat;
+pub mod providers;
 
-pub use candle_gguf::{CandleGgufConfig, CandleGgufProvider, ENV_GGUF_PATH};
-pub use config::{LlmConfig, llm_config_from_env, llm_config_from_map, openai_provider_from_env};
+pub use catalog::{CatalogError, ModelCatalog, ModelInfo, StaticCatalog};
 pub use openai_compat::{FreeTierPolicy, OpenAiCompatibleProvider, is_free_tier_model};
+pub use providers::{
+    ConfigCatalog, ConfigError, LoadedConfig, TantraConfig, config_paths, load_config, merge,
+    parse_config, resolve_value,
+};
 
 /// A cryptographic hash of a prompt, used for deterministic replay.
 ///

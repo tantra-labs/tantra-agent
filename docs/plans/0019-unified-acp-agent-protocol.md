@@ -48,9 +48,15 @@ remote** behind the same client.
 | `TurnEnded` | `PromptResponse.stopReason` (`end_turn`, `max_tokens`, `refusal`, `cancelled`, max-turn) |
 
 LLM configuration rule: the **host** owns provider construction and secrets. Clients only
-select among `_meta.tantra.models` by id; API keys never cross the wire. In embedded mode
-the client process *is* the host, so `--model`, `TANTRA_GGUF_PATH`, `TANTRA_LLM_BASE_URL`
-etc. configure it locally.
+select among `_meta.tantra.models` by id; API keys never cross the wire. Every LLM is an
+OpenAI-compatible endpoint listed in a `tantra.jsonc` config file (see
+`docs/design/provider-config.md`); there are no LLM env vars and no in-process GGUF provider.
+In embedded mode the client process *is* the host, so `--config` and `--model` configure it locally.
+
+### Phase 0 — provider config file (done)
+- `tantra-agent-llm::providers`: opencode-style `provider` block, `{env:}`/`{file:}` references,
+  user + project merge, `ConfigCatalog` -> `StaticCatalog`; `ModelCatalog` moved to `tantra-agent-llm::catalog`.
+- Candle GGUF provider, chat-template format layer and `TANTRA_LLM_*` env API removed.
 
 ### Phase 1 — `tantra-agent-acp` crate (agent tier, this repo)
 - `ModelCatalog` port (trait): `list() -> Vec<ModelInfo>`, `provider(id) -> Result<Arc<dyn LlmProvider>, CatalogError>`; typed errors.

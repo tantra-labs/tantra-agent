@@ -1,11 +1,10 @@
 //! Live OmniRoute trader-loop integration test.
 //!
 //! Ignored by default (requires a running OmniRoute / OpenAI-compatible router
-//! and `TANTRA_LLM_BASE_URL` / `TANTRA_LLM_MODEL` env vars). Run manually:
+//! declared in a `tantra.jsonc` provider config — see `docs/design/provider-config.md`;
+//! the config's default model is used). Run manually:
 //!
 //! ```text
-//! TANTRA_LLM_BASE_URL=http://localhost:11434/v1 \
-//! TANTRA_LLM_MODEL=gpt-4o-mini \
 //! cargo test -p tantra-agent-trader-loop -- --ignored
 //! ```
 //!
@@ -17,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use tantra_agent_core::DecisionParser;
-use tantra_agent_llm::{LlmProvider, openai_provider_from_env};
+use tantra_agent_llm::{ConfigCatalog, LlmProvider, ModelCatalog, load_config};
 use tantra_agent_replay::{FixtureWorkload, OmnirouteFixture, OmnirouteFixtureSet};
 use tantra_agent_trader_loop::{TraderConfig, TraderLoop};
 use tantra_core::Decision;
@@ -28,10 +27,31 @@ const GOLDEN_PATH: &str = concat!(
     "/../tantra-agent-replay/tests/golden/omniroute_decision_fixtures.json"
 );
 
+fn load_provider() -> Option<Arc<dyn LlmProvider>> {
+    let loaded = match load_config(None) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("skipping: {e}");
+            return None;
+        }
+    };
+    let catalog = match ConfigCatalog::build(&loaded, &|k| std::env::var(k).ok()) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("skipping: {e}");
+            return None;
+        }
+    };
+    catalog.provider(&catalog.default_model()).ok()
+}
+
 #[tokio::test]
-#[ignore = "requires a running OmniRoute router and TANTRA_LLM_* env vars"]
+#[ignore = "requires a running gateway and a tantra.jsonc config"]
 async fn test_trader_loop_decision_against_omniroute() {
-    let provider = Arc::new(openai_provider_from_env().expect("TANTRA_LLM_* env vars"));
+    let provider = match load_provider() {
+        Some(p) => p,
+        None => return,
+    };
     let config = TraderConfig {
         name: "omniroute-int".to_string(),
         universe: vec!["TCS".to_string()],

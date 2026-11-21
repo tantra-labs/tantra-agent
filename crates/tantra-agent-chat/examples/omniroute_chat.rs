@@ -19,7 +19,25 @@ use tantra_agent_chat::{
     ChatAgent, InMemorySessionStore, SessionEvent, SessionSelector, ToolRegistry, run_turn_headless,
 };
 use tantra_agent_core::{RuntimeMode, SessionScope};
-use tantra_agent_llm::openai_provider_from_env;
+use tantra_agent_llm::{ConfigCatalog, LlmProvider, ModelCatalog, load_config};
+
+fn load_provider() -> Option<Arc<dyn LlmProvider>> {
+    let loaded = match load_config(None) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("skipping: {e}");
+            return None;
+        }
+    };
+    let catalog = match ConfigCatalog::build(&loaded, &|k| std::env::var(k).ok()) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("skipping: {e}");
+            return None;
+        }
+    };
+    catalog.provider(&catalog.default_model()).ok()
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -27,7 +45,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .unwrap_or_else(|| "Give a one-line overview of NIFTY 50 today.".to_string());
 
-    let provider = Arc::new(openai_provider_from_env()?);
+    let provider = match load_provider() {
+        Some(p) => p,
+        None => return Ok(()),
+    };
     let store = Arc::new(InMemorySessionStore::new());
     let agent = ChatAgent::builder(provider, ToolRegistry::new(), store.clone()).build()?;
 

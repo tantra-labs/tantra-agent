@@ -19,12 +19,33 @@ use tantra_agent_chat::{
     run_turn_headless,
 };
 use tantra_agent_core::{RuntimeMode, SessionScope};
-use tantra_agent_llm::openai_provider_from_env;
+use tantra_agent_llm::{ConfigCatalog, LlmProvider, ModelCatalog, load_config};
+
+fn load_provider() -> Option<Arc<dyn LlmProvider>> {
+    let loaded = match load_config(None) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("skipping: {e}");
+            return None;
+        }
+    };
+    let catalog = match ConfigCatalog::build(&loaded, &|k| std::env::var(k).ok()) {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("skipping: {e}");
+            return None;
+        }
+    };
+    catalog.provider(&catalog.default_model()).ok()
+}
 
 #[tokio::test]
-#[ignore = "requires a running OmniRoute router and TANTRA_LLM_* env vars"]
+#[ignore = "requires a running gateway and a tantra.jsonc config"]
 async fn test_chat_turn_round_trips_against_omniroute() {
-    let provider = Arc::new(openai_provider_from_env().expect("TANTRA_LLM_* env vars"));
+    let provider = match load_provider() {
+        Some(p) => p,
+        None => return,
+    };
     let store = Arc::new(InMemorySessionStore::new());
     let agent = ChatAgent::builder(provider, ToolRegistry::new(), store.clone())
         .build()
