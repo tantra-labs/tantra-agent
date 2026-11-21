@@ -29,6 +29,7 @@ pub mod strategy_loop;
 pub mod strategy_manage;
 pub mod tax;
 pub mod trade_intent;
+pub mod view;
 
 pub use alert::{
     AlertOperation, PriceAlertInput, PriceAlertListInput, PriceAlertListTool, PriceAlertTool,
@@ -81,8 +82,8 @@ pub use ports::{
 pub mod strategy;
 
 pub use catalog::{
-    create_strategy_loop_tools, create_strategy_tools, register_strategy_loop_tools,
-    register_strategy_tools,
+    create_presentation_tools, create_strategy_loop_tools, create_strategy_tools,
+    register_presentation_tools, register_strategy_loop_tools, register_strategy_tools,
 };
 pub use ports::strategy::{DefaultStrategyRunner, StrategyRunner};
 pub use statement::{LedgerStatementInput, LedgerStatementTool};
@@ -96,3 +97,4 @@ pub use strategy_loop::{
 pub use strategy_manage::{StrategyManageInput, StrategyManageTool};
 pub use tax::{TaxReportInput, TaxReportTool};
 pub use trade_intent::{ProposeTradeInput, ProposeTradeTool};
+pub use view::{PRESENT_VIEW_GUIDANCE, PresentViewTool};

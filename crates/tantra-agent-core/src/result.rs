@@ -44,6 +44,26 @@ pub struct MetricItem {
     pub value: String,
 }
 
+/// Layout a client should open for a `present_view` result.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewKind {
+    /// Single-instrument analysis.
+    Analysis,
+    /// Options chain / strategy view.
+    Options,
+    /// Backtest results.
+    Backtest,
+    /// Strategy lab (sweeps, tuning).
+    StrategyLab,
+    /// Portfolio holdings.
+    Portfolio,
+    /// Side-by-side comparison.
+    Compare,
+    /// Free-form report.
+    Report,
+}
+
 /// Typed visual presentation block for MCP clients.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -92,6 +112,26 @@ pub enum DisplayBlock {
         /// Optional bar timestamps (unix seconds) aligning scene indices to time.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         time_axis: Vec<i64>,
+    },
+    /// An agent-composed pane layout (`present_view`): which view to open, a markdown summary,
+    /// highlight metrics, and which earlier tool results (by tool name) to show in it.
+    View {
+        /// Layout to open.
+        kind: ViewKind,
+        /// View title.
+        title: String,
+        /// Focus symbols.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        symbols: Vec<String>,
+        /// Short markdown summary.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        summary: String,
+        /// Highlight metrics.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        highlights: Vec<MetricItem>,
+        /// Names of earlier tools whose results this view shows.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        include_tools: Vec<String>,
     },
 }
 

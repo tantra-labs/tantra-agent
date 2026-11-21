@@ -30,6 +30,7 @@ pub mod ref_store;
 pub mod result;
 pub mod strategy_loop;
 pub mod tool;
+pub mod view;
 
 pub use decision::{
     DecisionParser, SEBI_ALGO_ID_REGEX, extract_json_payload, is_valid_sebi_algo_id,
@@ -52,10 +53,13 @@ pub use prompt::{
     PromptTemplate, compute_prompt_hash, default_assemble, hash_prompt_hex, sha256_hex,
 };
 pub use ref_store::{DataReferenceStore, RefEntry};
-pub use result::{DisplayBlock, ExecutionMeta, MetricItem, ResultStatus, TantraResultEnvelope};
+pub use result::{
+    DisplayBlock, ExecutionMeta, MetricItem, ResultStatus, TantraResultEnvelope, ViewKind,
+};
 pub use strategy_loop::{
     SceneAnnotateRequest, StrategyHedgeRequest, StrategyLoopBounds, StrategyLoopEvalRequest,
     StrategyLoopPort, StrategyLoopPortError, StrategyLoopPortErrorKind, StrategyLoopSweepRequest,
     scene_annotation,
 };
 pub use tool::{ToolCall, ToolError, ToolOutput, ToolSpec};
+pub use view::{PresentViewRequest, ViewError, present_view};

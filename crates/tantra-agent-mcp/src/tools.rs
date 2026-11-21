@@ -1011,6 +1011,35 @@ fn strategy_loop_tool_definitions() -> Vec<serde_json::Value> {
                 "additionalProperties": false
             }
         }),
+        json!({
+            "name": "present_view",
+            "description": "Open a view in the client's right-hand pane once data is gathered. References earlier tool results by name (include_tools); does not carry data. Pure; call at most once, as the last tool.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "kind": { "type": "string", "enum": ["analysis", "options", "backtest", "strategy_lab", "portfolio", "compare", "report"] },
+                    "title": { "type": "string", "maxLength": 120 },
+                    "symbols": { "type": "array", "maxItems": 4, "items": { "type": "string", "maxLength": 40 } },
+                    "summary": { "type": "string", "maxLength": 4000, "description": "short markdown summary" },
+                    "highlights": {
+                        "type": "array",
+                        "maxItems": 12,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "label": { "type": "string", "maxLength": 40 },
+                                "value": { "type": "string", "maxLength": 40 }
+                            },
+                            "required": ["label", "value"],
+                            "additionalProperties": false
+                        }
+                    },
+                    "include_tools": { "type": "array", "maxItems": 16, "items": { "type": "string", "maxLength": 40 } }
+                },
+                "required": ["kind", "title"],
+                "additionalProperties": false
+            }
+        }),
     ]
 }
 

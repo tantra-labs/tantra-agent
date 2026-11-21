@@ -187,6 +187,13 @@ impl McpServer {
             let envelope = scene_annotation(&req).map_err(McpError::from)?;
             return serde_json::to_value(envelope).map_err(McpError::Json);
         }
+        if name == "present_view" {
+            let req: tantra_agent_core::PresentViewRequest =
+                serde_json::from_value(arguments).map_err(bad)?;
+            let envelope = tantra_agent_core::present_view(&req)
+                .map_err(|e| McpError::InvalidArguments(e.to_string()))?;
+            return serde_json::to_value(envelope).map_err(McpError::Json);
+        }
         let port = self.loop_port()?;
         let result = match name {
             "strategy_loop_eval" => {
@@ -399,7 +406,8 @@ impl McpServer {
             "strategy_loop_eval"
             | "strategy_loop_sweep"
             | "strategy_hedge_recommend"
-            | "chart_scene_annotate" => return self.call_loop_tool(name, arguments).await,
+            | "chart_scene_annotate"
+            | "present_view" => return self.call_loop_tool(name, arguments).await,
             "get_indicator_catalog" => match self.library_catalog().await {
                 Some(c) => self.indicator_catalog.get_catalog_json_with(c),
                 None => self.indicator_catalog.get_catalog_json(),

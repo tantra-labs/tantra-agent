@@ -302,3 +302,15 @@ pub fn create_strategy_loop_tools(port: Arc<dyn StrategyLoopPort>) -> Vec<Arc<dy
 pub fn register_strategy_loop_tools(registry: &mut ToolRegistry, port: Arc<dyn StrategyLoopPort>) {
     registry.register_all(create_strategy_loop_tools(port));
 }
+
+use crate::view::PresentViewTool;
+
+/// Bundle of the presentation tools (`present_view`).
+pub fn create_presentation_tools() -> Vec<Arc<dyn ChatTool>> {
+    vec![Arc::new(PresentViewTool::new())]
+}
+
+/// Register the presentation tools into a registry.
+pub fn register_presentation_tools(registry: &mut ToolRegistry) {
+    registry.register_all(create_presentation_tools());
+}
