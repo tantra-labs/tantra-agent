@@ -34,7 +34,13 @@ impl StrategyLoopPort for Fake {
         Ok(canned())
     }
     async fn sweep(&self, _r: StrategyLoopSweepRequest) -> Result<Value, StrategyLoopPortError> {
-        Ok(canned())
+        let c = canned();
+        Ok(json!({
+            "winner": {"oos_kpis": {"win_rate_pct": "61.5"}},
+            "winner_scene": c["scene"],
+            "baseline_scene": c["scene"],
+            "bars": c["bars"],
+        }))
     }
     async fn recommend_hedge(
         &self,
@@ -148,4 +154,34 @@ async fn scene_annotate_is_pure() {
         .await
         .unwrap();
     assert_eq!(out.payload["blocks"][1]["type"], "overlay_scene");
+}
+
+#[tokio::test]
+async fn eval_payload_drops_bars_and_duplicated_scene() {
+    let out = find(&tools(false), "strategy_loop_eval")
+        .execute(eval_args(), ctx())
+        .await
+        .unwrap();
+    let data = &out.payload["data"];
+    assert!(data.get("bars").is_none() && data.get("scene").is_none());
+    assert!(data.get("kpis").is_some());
+}
+
+#[tokio::test]
+async fn sweep_uses_winner_scene_and_kpis() {
+    let args = json!({"base": eval_args(), "bounds": {"sl_buffer_atr_grid": ["0.25", "0.5"]}});
+    let out = find(&tools(false), "strategy_loop_sweep")
+        .execute(args, ctx())
+        .await
+        .unwrap();
+    let blocks = out.payload["blocks"].as_array().unwrap();
+    assert_eq!(blocks[0]["type"], "metric_grid");
+    assert_eq!(blocks[1]["type"], "overlay_scene");
+    assert_eq!(
+        blocks[1]["time_axis"],
+        json!([1767225600i64, 1767312000i64])
+    );
+    let data = &out.payload["data"];
+    assert!(data.get("winner_scene").is_none() && data.get("baseline_scene").is_none());
+    assert!(data.get("bars").is_none());
 }

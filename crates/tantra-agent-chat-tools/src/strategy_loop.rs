@@ -91,24 +91,58 @@ fn time_axis(response: &Value) -> Vec<i64> {
     out
 }
 
+/// Trades kept in the tool payload (the chat layer caps a tool result at 64 KiB and
+/// truncates beyond it, which would corrupt the JSON).
+const MAX_PAYLOAD_TRADES: usize = 25;
+
+/// Drop fields already carried by the `OverlayScene` block (`bars` became its time axis,
+/// the scenes are the block itself) and cap the trade list, so the envelope stays small.
+fn slim_loop_data(response: &mut Value) {
+    let Some(obj) = response.as_object_mut() else {
+        return;
+    };
+    for key in ["bars", "scene", "winner_scene", "baseline_scene"] {
+        obj.remove(key);
+    }
+    if let Some(trades) = obj.get_mut("trades").and_then(Value::as_array_mut) {
+        let total = trades.len();
+        if total > MAX_PAYLOAD_TRADES {
+            trades.truncate(MAX_PAYLOAD_TRADES);
+            obj.insert("trades_truncated_from".to_string(), Value::from(total));
+        }
+    }
+}
+
 fn loop_payload(
     tool: &str,
     title: String,
     timeframe: &str,
     instrument: &str,
-    response: Value,
+    mut response: Value,
 ) -> Result<ToolOutput, ToolError> {
     let mut blocks = Vec::new();
-    blocks.extend(scalar_grid(response.get("kpis")));
-    if let Some(scene) = response.get("scene").filter(|s| s.is_object()) {
+    // Evaluate returns `kpis`; a sweep returns the winner's KPIs under `winner.oos_kpis`.
+    let kpis = response
+        .get("kpis")
+        .or_else(|| response.pointer("/winner/oos_kpis"));
+    blocks.extend(scalar_grid(kpis));
+    let axis = time_axis(&response);
+    // Evaluate returns `scene`; a sweep returns `winner_scene` (+ `baseline_scene`).
+    let scene = response
+        .get("scene")
+        .or_else(|| response.get("winner_scene"))
+        .filter(|s| s.is_object())
+        .cloned();
+    if let Some(scene) = scene {
         blocks.push(DisplayBlock::OverlayScene {
             title: title.clone(),
             symbol: instrument.to_string(),
             timeframe: timeframe.to_string(),
-            scene: scene.clone(),
-            time_axis: time_axis(&response),
+            scene,
+            time_axis: axis,
         });
     }
+    slim_loop_data(&mut response);
     let summary = format!("{tool}: {title}");
     let env = TantraResultEnvelope::ok(summary, response).with_blocks(blocks);
     let payload = serde_json::to_value(env)
