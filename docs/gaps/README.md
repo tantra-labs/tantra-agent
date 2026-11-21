@@ -7,7 +7,9 @@ Per workspace rule `.agents/rules/gap-tracking.md`:
 
 ## Open Gaps
 
-None — all filed gaps are implemented (see Closed below).
+| # | Title | Area |
+|---|-------|------|
+| [0009](0009-chart-series-ref-not-delivered-to-chat-clients.md) | `DisplayBlock::Chart` series refs are not resolvable by chat clients | `tantra-agent-chat` / `ref_store` (consumer: tantra-ui TUI analysis page) |
 
 ## Closed Gaps
 
