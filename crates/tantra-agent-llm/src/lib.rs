@@ -24,6 +24,7 @@ use tantra_core::Decision;
 
 pub mod candle_gguf;
 pub mod config;
+pub mod format;
 pub mod openai_compat;
 
 pub use candle_gguf::{CandleGgufConfig, CandleGgufProvider, ENV_GGUF_PATH};

@@ -24,8 +24,9 @@ use tokio::task;
 use tantra_agent_core::decision::DecisionParser;
 use tantra_core::Decision;
 
+use crate::format::{ParsedChunk, format_for, parse_override};
 use crate::{
-    ChatMessage, ChatRequest, ChatRole, ChatStreamEvent, EventStream, LlmError, LlmProvider,
+    ChatMessage, ChatRequest, ChatStreamEvent, EventStream, LlmError, LlmProvider, LlmToolCall,
     StopReason, Usage,
 };
 
@@ -34,6 +35,10 @@ pub const ENV_GGUF_PATH: &str = "TANTRA_GGUF_PATH";
 
 /// Environment variable for GGUF model temperature.
 pub const ENV_GGUF_TEMPERATURE: &str = "TANTRA_GGUF_TEMPERATURE";
+
+/// Environment variable overriding the detected prompt/tool format
+/// (`llama3`, `chatml`, `hermes`, `qwen`).
+pub const ENV_GGUF_FORMAT: &str = "TANTRA_GGUF_FORMAT";
 
 /// Environment variable for GGUF max generated tokens.
 pub const ENV_GGUF_MAX_TOKENS: &str = "TANTRA_GGUF_MAX_TOKENS";
@@ -185,7 +190,7 @@ impl CandleGgufConfig {
 }
 
 /// System prompt used when a request carries none.
-const DEFAULT_SYSTEM_PROMPT: &str = "You are Tantra, an intelligent quantitative finance and algorithmic trading assistant for Indian equities (NSE/BSE). You provide clear, insightful, disciplined financial and algorithmic trading analysis.";
+pub(crate) const DEFAULT_SYSTEM_PROMPT: &str = "You are Tantra, an intelligent quantitative finance and algorithmic trading assistant for Indian equities (NSE/BSE). You provide clear, insightful, disciplined financial and algorithmic trading analysis.";
 
 /// Tokens of trailing context the repeat penalty looks back over.
 const REPEAT_LAST_N: usize = 64;
@@ -384,57 +389,7 @@ impl CandleGgufProvider {
         messages: &[ChatMessage],
         system_prompt: Option<&str>,
     ) -> String {
-        if template == ChatTemplate::Llama3 {
-            return Self::format_llama3(messages, system_prompt);
-        }
-        let mut prompt = String::new();
-        let sys = system_prompt.unwrap_or(DEFAULT_SYSTEM_PROMPT);
-        if !sys.trim().is_empty() {
-            prompt.push_str("<|im_start|>system\n");
-            prompt.push_str(sys.trim());
-            prompt.push_str("<|im_end|>\n");
-        }
-
-        for msg in messages {
-            let role_str = match msg.role {
-                ChatRole::System => "system",
-                ChatRole::User => "user",
-                ChatRole::Assistant => "assistant",
-                ChatRole::Tool => "tool",
-            };
-            prompt.push_str(&format!("<|im_start|>{role_str}\n"));
-            prompt.push_str(msg.content.trim());
-            prompt.push_str("<|im_end|>\n");
-        }
-
-        prompt.push_str("<|im_start|>assistant\n");
-        prompt
-    }
-
-    fn format_llama3(messages: &[ChatMessage], system_prompt: Option<&str>) -> String {
-        fn turn(prompt: &mut String, role: &str, content: &str) {
-            prompt.push_str("<|start_header_id|>");
-            prompt.push_str(role);
-            prompt.push_str("<|end_header_id|>\n\n");
-            prompt.push_str(content.trim());
-            prompt.push_str("<|eot_id|>");
-        }
-        let mut prompt = String::new();
-        let sys = system_prompt.unwrap_or(DEFAULT_SYSTEM_PROMPT);
-        if !sys.trim().is_empty() {
-            turn(&mut prompt, "system", sys);
-        }
-        for msg in messages {
-            let role = match msg.role {
-                ChatRole::System => "system",
-                ChatRole::User => "user",
-                ChatRole::Assistant => "assistant",
-                ChatRole::Tool => "ipython",
-            };
-            turn(&mut prompt, role, &msg.content);
-        }
-        prompt.push_str("<|start_header_id|>assistant<|end_header_id|>\n\n");
-        prompt
+        format_for(template).render(messages, system_prompt, &[])
     }
 
     /// Get current configuration.
@@ -582,6 +537,7 @@ impl LlmProvider for CandleGgufProvider {
         }
         let messages = request.messages.clone();
         let system_prompt = request.system_prompt.clone();
+        let tools = request.tools.clone();
         let (tx, rx) = mpsc::channel(64);
 
         let config = self.config.clone();
@@ -605,9 +561,14 @@ impl LlmProvider for CandleGgufProvider {
                 loaded.weights.clear_kv_cache();
 
                 // The prompt is formatted in the loaded model's own chat template.
-                let prompt =
-                    Self::format_prompt_for(loaded.template, &messages, system_prompt.as_deref());
-                let prompt_tokens = encode_prompt(&loaded.tokenizer, loaded.template, &prompt)?;
+                let template = parse_override(std::env::var(ENV_GGUF_FORMAT).ok().as_deref())
+                    .unwrap_or(loaded.template);
+                let fmt = format_for(template);
+                let prompt = fmt.render(&messages, system_prompt.as_deref(), &tools);
+                let mut parser = fmt.new_parser();
+                let mut answer_text = String::new();
+                let mut calls: Vec<LlmToolCall> = Vec::new();
+                let prompt_tokens = encode_prompt(&loaded.tokenizer, template, &prompt)?;
 
                 if prompt_tokens.is_empty() {
                     return Err(LlmError::Transport(
@@ -691,10 +652,7 @@ impl LlmProvider for CandleGgufProvider {
                         break;
                     }
 
-                    if tx
-                        .blocking_send(Ok(ChatStreamEvent::TextDelta { text: piece }))
-                        .is_err()
-                    {
+                    if !dispatch_chunks(parser.feed(&piece), &mut answer_text, &mut calls, &tx) {
                         return Ok(());
                     }
 
@@ -723,6 +681,10 @@ impl LlmProvider for CandleGgufProvider {
                     })?;
                 }
 
+                if !dispatch_chunks(parser.finish(), &mut answer_text, &mut calls, &tx) {
+                    return Ok(());
+                }
+
                 let usage = Usage {
                     input_tokens: prompt_tokens.len() as u32,
                     output_tokens: generated_tokens.len() as u32,
@@ -731,7 +693,7 @@ impl LlmProvider for CandleGgufProvider {
                 };
 
                 let _ = tx.blocking_send(Ok(ChatStreamEvent::Usage(usage)));
-                let clean_text = generated_text
+                let clean_text = answer_text
                     .replace("<|im_end|>", "")
                     .replace("<|im_start|>", "")
                     .replace("<|eot_id|>", "")
@@ -740,9 +702,17 @@ impl LlmProvider for CandleGgufProvider {
                     .replace("<|end_of_text|>", "")
                     .trim()
                     .to_string();
+                let (stop_reason, message) = if calls.is_empty() {
+                    (StopReason::EndTurn, ChatMessage::assistant(clean_text))
+                } else {
+                    (
+                        StopReason::ToolUse,
+                        ChatMessage::assistant_with_tools(clean_text, calls),
+                    )
+                };
                 let _ = tx.blocking_send(Ok(ChatStreamEvent::MessageEnd {
-                    stop_reason: StopReason::EndTurn,
-                    message: ChatMessage::assistant(clean_text),
+                    stop_reason,
+                    message,
                     usage,
                 }));
 
@@ -759,6 +729,47 @@ impl LlmProvider for CandleGgufProvider {
         });
         Ok(Box::pin(stream))
     }
+}
+
+/// Forward parsed chunks as stream events; returns false when the receiver is gone.
+fn dispatch_chunks(
+    chunks: Vec<ParsedChunk>,
+    answer_text: &mut String,
+    calls: &mut Vec<LlmToolCall>,
+    tx: &mpsc::Sender<Result<ChatStreamEvent, LlmError>>,
+) -> bool {
+    for chunk in chunks {
+        let event = match chunk {
+            ParsedChunk::Text(text) => {
+                answer_text.push_str(&text);
+                ChatStreamEvent::TextDelta { text }
+            }
+            ParsedChunk::ToolCall {
+                name,
+                arguments,
+                raw_arguments,
+                is_malformed,
+            } => {
+                let call_id = format!("call_{}", calls.len() + 1);
+                calls.push(LlmToolCall {
+                    id: call_id.clone(),
+                    name: name.clone(),
+                    arguments: raw_arguments.clone(),
+                });
+                ChatStreamEvent::ToolCallReady {
+                    call_id,
+                    name,
+                    arguments,
+                    raw_arguments,
+                    is_malformed,
+                }
+            }
+        };
+        if tx.blocking_send(Ok(event)).is_err() {
+            return false;
+        }
+    }
+    true
 }
 
 /// Penalise tokens seen in the last [`REPEAT_LAST_N`] context tokens (the configured
