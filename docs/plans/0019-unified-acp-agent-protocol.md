@@ -72,11 +72,11 @@ In embedded mode the client process *is* the host, so `--config` and `--model` c
   round-trip, cancel, unknown model → typed error.
 
 ### Phase 2 — runtime ACP endpoint (`tantra-runtime`)
-- `GET /v1/acp` WebSocket hosting `AcpAgent` per connection; auth middleware + `Caller`
+- `GET /api/v1/acp` WebSocket hosting `AcpAgent` per connection; auth middleware + `Caller`
   scoping (sessions keyed by `(caller_id, workspace)`); `ModelCatalog` backed by the existing
   chat provider registry; SQLx `SessionStore`; bounded frame size and per-socket session cap.
 - `/ws/chat` kept as a deprecated shim until Phase 4 lands, then removed.
-- **Done 2026-11-21** (runtime `756d267`): `acp_ws_handler` on `/v1/acp` (Authenticated scope,
+- **Done 2026-11-21** (runtime `756d267`): `acp_ws_handler` on `/api/v1/acp` (Authenticated scope,
   `Caller` extracted), full chat tool set + `present_view` (agent plan 0020), host system prompt
   appends `PRESENT_VIEW_GUIDANCE`, 64-connection semaphore, 1 MiB frames, 256 KiB duplex bridge.
   **Deviations / follow-ups**:
@@ -87,7 +87,7 @@ In embedded mode the client process *is* the host, so `--config` and `--model` c
 ### Phase 3 — TUI + CLI (`tantra-ui`)
 - **Done 2026-11-21 (TUI)**:
   - The TUI runs agent turns over `AcpClient` (ui `86d35ee`). It's embedded by default via
-    `connect_embedded`; `--server ws://…/v1/acp [--token-file PATH]` connects remotely via the new
+    `connect_embedded`; `--server ws://…/api/v1/acp [--token-file PATH]` connects remotely via the new
     `connect_ws` (agent `c91301a`; rustls, 1 MiB frames, bearer header). No `TANTRA_SERVER` env var.
   - `/model` lists or switches models. `/auto` toggles a shared `ClientOptions.approve` flag
     without reconnecting. `/new` and Ctrl+N reconnect to start a fresh session.
@@ -98,7 +98,7 @@ In embedded mode the client process *is* the host, so `--config` and `--model` c
 - `tantra ask` uses the same client.
 
 ### Phase 4 — web (`tantra-ui-web`)
-- BFF `/api/acp` WebSocket proxy to `/v1/acp` forwarding `Authorization`, closing upstream on
+- BFF `/api/acp` WebSocket proxy to `/api/v1/acp` forwarding `Authorization`, closing upstream on
   `ReadableStream.cancel()`; TS ACP client; model picker in chat settings.
 
 ### Phase 5 — Python SDK (`tantra` package)
@@ -113,6 +113,6 @@ In embedded mode the client process *is* the host, so `--config` and `--model` c
   ui (L5) → agent-acp client; Python (L6) → public WS API. No cycles, R1–R4 preserved.
 - Interface-first: `ModelCatalog` trait + typed `AcpError`/`CatalogError` before adapters.
 - Bounded: every channel bounded; WS frames capped; per-connection session cap.
-- Security: `/v1/acp` behind `auth_middleware` whenever auth is enabled; sessions scoped by
+- Security: `/api/v1/acp` behind `auth_middleware` whenever auth is enabled; sessions scoped by
   `Caller`; BFF forwards `Authorization`; no secrets on the wire; permission prompts
   fail closed (no client reply → reject).
