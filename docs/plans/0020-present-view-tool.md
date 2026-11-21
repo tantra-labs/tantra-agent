@@ -1,6 +1,6 @@
 # 0020 — present_view: agent-composed pane layouts
 
-**Status**: Implemented 2026-11-21 (2ca5036)
+**Status**: Implemented 2026-11-21 (9859f6f)
 
 ## 0. Executive Summary & Objective
 
