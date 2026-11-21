@@ -25,6 +25,7 @@ pub mod market;
 pub mod portfolio;
 pub mod ports;
 pub mod statement;
+pub mod strategy_loop;
 pub mod strategy_manage;
 pub mod tax;
 pub mod trade_intent;
@@ -79,12 +80,18 @@ pub use ports::{
 };
 pub mod strategy;
 
-pub use catalog::{create_strategy_tools, register_strategy_tools};
+pub use catalog::{
+    create_strategy_loop_tools, create_strategy_tools, register_strategy_loop_tools,
+    register_strategy_tools,
+};
 pub use ports::strategy::{DefaultStrategyRunner, StrategyRunner};
 pub use statement::{LedgerStatementInput, LedgerStatementTool};
 pub use strategy::{
     StrategyRunInput, StrategyRunTool, StrategyTuneInput, StrategyTuneTool, TradeSuggestionInput,
     TradeSuggestionTool,
+};
+pub use strategy_loop::{
+    ChartSceneAnnotateTool, StrategyHedgeRecommendTool, StrategyLoopEvalTool, StrategyLoopSweepTool,
 };
 pub use strategy_manage::{StrategyManageInput, StrategyManageTool};
 pub use tax::{TaxReportInput, TaxReportTool};

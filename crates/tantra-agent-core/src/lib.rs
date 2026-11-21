@@ -28,6 +28,7 @@ pub mod ports;
 pub mod prompt;
 pub mod ref_store;
 pub mod result;
+pub mod strategy_loop;
 pub mod tool;
 
 pub use decision::{
@@ -52,4 +53,9 @@ pub use prompt::{
 };
 pub use ref_store::{DataReferenceStore, RefEntry};
 pub use result::{DisplayBlock, ExecutionMeta, MetricItem, ResultStatus, TantraResultEnvelope};
+pub use strategy_loop::{
+    SceneAnnotateRequest, StrategyHedgeRequest, StrategyLoopBounds, StrategyLoopEvalRequest,
+    StrategyLoopPort, StrategyLoopPortError, StrategyLoopPortErrorKind, StrategyLoopSweepRequest,
+    scene_annotation,
+};
 pub use tool::{ToolCall, ToolError, ToolOutput, ToolSpec};

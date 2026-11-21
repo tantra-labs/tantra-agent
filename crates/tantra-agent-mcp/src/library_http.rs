@@ -12,6 +12,10 @@ use tantra_agent_core::library::{
     DescribeFormat, IndicatorComputeRequest, IndicatorLibraryPort, LibraryDescribeRequest,
     LibraryPortError, LibrarySearchRequest, SignalStudyRequest,
 };
+use tantra_agent_core::strategy_loop::{
+    StrategyHedgeRequest, StrategyLoopEvalRequest, StrategyLoopPort, StrategyLoopPortError,
+    StrategyLoopSweepRequest,
+};
 
 /// Maximum accepted response body size (16 MiB).
 pub const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
@@ -209,5 +213,29 @@ impl IndicatorLibraryPort for RuntimeLibraryClient {
 
     async fn signal_study(&self, request: SignalStudyRequest) -> Result<Value, LibraryPortError> {
         self.post("/api/v2/studies/signal-study", &request).await
+    }
+}
+
+#[async_trait::async_trait]
+impl StrategyLoopPort for RuntimeLibraryClient {
+    async fn evaluate(&self, req: StrategyLoopEvalRequest) -> Result<Value, StrategyLoopPortError> {
+        Ok(self
+            .post("/api/v2/studies/strategy-loop/evaluate", &req)
+            .await?)
+    }
+
+    async fn sweep(&self, req: StrategyLoopSweepRequest) -> Result<Value, StrategyLoopPortError> {
+        Ok(self
+            .post("/api/v2/studies/strategy-loop/sweep", &req)
+            .await?)
+    }
+
+    async fn recommend_hedge(
+        &self,
+        req: StrategyHedgeRequest,
+    ) -> Result<Value, StrategyLoopPortError> {
+        Ok(self
+            .post("/api/v2/studies/strategy-loop/recommend-hedge", &req)
+            .await?)
     }
 }

@@ -8,6 +8,10 @@ use tantra_agent_core::library::{
     IndicatorComputeRequest, IndicatorLibraryPort, LibraryDescribeRequest, LibrarySearchRequest,
     SignalStudyRequest,
 };
+use tantra_agent_core::strategy_loop::{
+    SceneAnnotateRequest, StrategyHedgeRequest, StrategyLoopEvalRequest, StrategyLoopPort,
+    StrategyLoopSweepRequest, scene_annotation,
+};
 use tokio::sync::OnceCell;
 
 use crate::error::McpError;
@@ -116,6 +120,7 @@ pub struct McpServer {
     pub data_store: DataReferenceStore,
     /// Optional indicator library port (HTTP client to the runtime in production).
     library: Option<Arc<dyn IndicatorLibraryPort>>,
+    loop_port: Option<Arc<dyn StrategyLoopPort>>,
     /// Lazily built library-extended catalog (populated on first use when a port is set).
     library_catalog: OnceCell<CoreIndicatorCatalog>,
 }
@@ -144,6 +149,7 @@ impl McpServer {
             regime: RegimeToolService::new(),
             data_store: DataReferenceStore::new(),
             library: None,
+            loop_port: None,
             library_catalog: OnceCell::new(),
         }
     }
@@ -153,6 +159,57 @@ impl McpServer {
     pub fn with_library_port(mut self, port: Arc<dyn IndicatorLibraryPort>) -> Self {
         self.library = Some(port);
         self
+    }
+
+    /// Attach a strategy loop port enabling the `strategy_loop_*` / `strategy_hedge_recommend`
+    /// tools.
+    pub fn with_loop_port(mut self, port: Arc<dyn StrategyLoopPort>) -> Self {
+        self.loop_port = Some(port);
+        self
+    }
+
+    fn loop_port(&self) -> Result<&Arc<dyn StrategyLoopPort>, McpError> {
+        self.loop_port.as_ref().ok_or_else(|| {
+            McpError::Unavailable(
+                "strategy loop not configured (set TANTRA_RUNTIME_URL)".to_string(),
+            )
+        })
+    }
+
+    async fn call_loop_tool(
+        &self,
+        name: &str,
+        arguments: serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> {
+        let bad = |e: serde_json::Error| McpError::InvalidArguments(e.to_string());
+        if name == "chart_scene_annotate" {
+            let req: SceneAnnotateRequest = serde_json::from_value(arguments).map_err(bad)?;
+            let envelope = scene_annotation(&req).map_err(McpError::from)?;
+            return serde_json::to_value(envelope).map_err(McpError::Json);
+        }
+        let port = self.loop_port()?;
+        let result = match name {
+            "strategy_loop_eval" => {
+                let req: StrategyLoopEvalRequest =
+                    serde_json::from_value(arguments).map_err(bad)?;
+                req.validate().map_err(McpError::from)?;
+                port.evaluate(req).await
+            }
+            "strategy_loop_sweep" => {
+                let req: StrategyLoopSweepRequest =
+                    serde_json::from_value(arguments).map_err(bad)?;
+                req.validate().map_err(McpError::from)?;
+                port.sweep(req).await
+            }
+            _ => {
+                let req: StrategyHedgeRequest = serde_json::from_value(arguments).map_err(bad)?;
+                req.validate().map_err(McpError::from)?;
+                port.recommend_hedge(req).await
+            }
+        };
+        let data = result.map_err(McpError::from)?;
+        let envelope = TantraResultEnvelope::ok(name.to_string(), data);
+        serde_json::to_value(envelope).map_err(McpError::Json)
     }
 
     async fn library_catalog(&self) -> Option<&CoreIndicatorCatalog> {
@@ -339,6 +396,10 @@ impl McpServer {
             | "tantra_library_describe"
             | "tantra_indicator_compute"
             | "tantra_signal_study" => return self.call_library_tool(name, arguments).await,
+            "strategy_loop_eval"
+            | "strategy_loop_sweep"
+            | "strategy_hedge_recommend"
+            | "chart_scene_annotate" => return self.call_loop_tool(name, arguments).await,
             "get_indicator_catalog" => match self.library_catalog().await {
                 Some(c) => self.indicator_catalog.get_catalog_json_with(c),
                 None => self.indicator_catalog.get_catalog_json(),

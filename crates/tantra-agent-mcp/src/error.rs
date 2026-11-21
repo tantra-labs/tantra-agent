@@ -77,3 +77,17 @@ impl From<tantra_agent_core::library::LibraryPortError> for McpError {
         }
     }
 }
+
+impl From<tantra_agent_core::strategy_loop::StrategyLoopPortError> for McpError {
+    fn from(e: tantra_agent_core::strategy_loop::StrategyLoopPortError) -> Self {
+        use tantra_agent_core::strategy_loop::StrategyLoopPortErrorKind as K;
+        match e.kind {
+            K::Unavailable => McpError::Unavailable(e.message),
+            K::InvalidRequest => McpError::InvalidArguments(e.message),
+            K::NotFound => McpError::NotFound(e.message),
+            K::Busy => McpError::Busy(e.message),
+            K::Timeout => McpError::Timeout(e.message),
+            K::Upstream => McpError::Upstream(e.message),
+        }
+    }
+}

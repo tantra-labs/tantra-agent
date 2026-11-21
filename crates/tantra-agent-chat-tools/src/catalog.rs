@@ -282,3 +282,23 @@ pub fn register_strategy_tools(
     let tools = create_strategy_tools(runner);
     registry.register_all(tools);
 }
+
+use crate::strategy_loop::{
+    ChartSceneAnnotateTool, StrategyHedgeRecommendTool, StrategyLoopEvalTool, StrategyLoopSweepTool,
+};
+use tantra_agent_core::StrategyLoopPort;
+
+/// Bundle of the 4 strategy-loop tools (eval, sweep, hedge recommend, scene annotate).
+pub fn create_strategy_loop_tools(port: Arc<dyn StrategyLoopPort>) -> Vec<Arc<dyn ChatTool>> {
+    vec![
+        Arc::new(StrategyLoopEvalTool::new(Arc::clone(&port))),
+        Arc::new(StrategyLoopSweepTool::new(Arc::clone(&port))),
+        Arc::new(StrategyHedgeRecommendTool::new(port)),
+        Arc::new(ChartSceneAnnotateTool::new()),
+    ]
+}
+
+/// Register the 4 strategy-loop tools into a registry.
+pub fn register_strategy_loop_tools(registry: &mut ToolRegistry, port: Arc<dyn StrategyLoopPort>) {
+    registry.register_all(create_strategy_loop_tools(port));
+}

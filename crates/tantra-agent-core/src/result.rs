@@ -78,6 +78,21 @@ pub enum DisplayBlock {
         /// Human-readable alert message.
         message: String,
     },
+    /// A chart overlay scene (signals, bands, stops, indicators, hints, hedges) that a
+    /// client may offer to render on a chart ("Render on Chart").
+    OverlayScene {
+        /// Scene title.
+        title: String,
+        /// Instrument symbol.
+        symbol: String,
+        /// Bar timeframe.
+        timeframe: String,
+        /// Opaque overlay scene object (untrusted runtime data).
+        scene: serde_json::Value,
+        /// Optional bar timestamps (unix seconds) aligning scene indices to time.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        time_axis: Vec<i64>,
+    },
 }
 
 /// The universal result envelope (`tantra/result/v1`) returned by every tool.
