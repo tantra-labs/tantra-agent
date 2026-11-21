@@ -8,5 +8,7 @@ pub mod meta;
 
 pub use agent::{AgentHost, serve};
 pub use catalog::{CatalogError, ModelCatalog, ModelInfo, StaticCatalog};
-pub use client::{AcpClient, ClientEvent, ClientOptions, connect_embedded, connect_stdio};
+pub use client::{
+    AcpClient, ClientEvent, ClientOptions, connect_embedded, connect_stdio, connect_ws,
+};
 pub use error::AcpError;

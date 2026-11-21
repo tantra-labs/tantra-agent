@@ -29,6 +29,7 @@ license = "AGPL-3.0"
 repository = "https://github.com/tantra-labs/tantra-agent"
 
 [workspace.dependencies]
+tokio-tungstenite = { version = "0.24", default-features = false, features = ["connect", "handshake", "rustls-tls-webpki-roots"] }
 # Internal agent crates
 tantra-agent = { path = "crates/tantra-agent" }
 tantra-agent-core = { path = "crates/tantra-agent-core" }

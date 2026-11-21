@@ -41,6 +41,9 @@ pub enum ClientEvent {
 #[derive(Debug, Clone, Default)]
 pub struct ClientOptions {
     pub auto_approve: bool,
+    /// When set, read on every permission request (overrides `auto_approve`);
+    /// lets a UI toggle approval without reconnecting.
+    pub approve: Option<Arc<std::sync::atomic::AtomicBool>>,
     pub model: Option<String>,
     pub workspace: Option<String>,
 }
@@ -231,6 +234,7 @@ async fn connect_inner(
 
     let notif_tx = ev_tx.clone();
     let auto_approve = opts.auto_approve;
+    let approve = opts.approve.clone();
 
     tokio::spawn(async move {
         let _keepalive = keepalive;
@@ -251,11 +255,10 @@ async fn connect_inner(
                 async move |_req: RequestPermissionRequest,
                             responder: Responder<RequestPermissionResponse>,
                             _cx: ConnectionTo<Agent>| {
-                    let id = if auto_approve {
-                        "allow_once"
-                    } else {
-                        "reject_once"
-                    };
+                    let allow = approve.as_ref().map_or(auto_approve, |f| {
+                        f.load(std::sync::atomic::Ordering::Relaxed)
+                    });
+                    let id = if allow { "allow_once" } else { "reject_once" };
                     responder.respond(RequestPermissionResponse::new(
                         RequestPermissionOutcome::Selected(SelectedPermissionOutcome::new(
                             PermissionOptionId::new(id),
@@ -384,4 +387,114 @@ pub async fn connect_stdio(
         .take()
         .ok_or_else(|| AcpError::Protocol("child stdout unavailable".into()))?;
     connect_inner(stdout, stdin, opts, Some(Box::new(child))).await
+}
+
+struct WsGuard(Vec<tokio::task::JoinHandle<()>>);
+
+impl Drop for WsGuard {
+    fn drop(&mut self) {
+        for h in &self.0 {
+            h.abort();
+        }
+    }
+}
+
+type WsStream =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+
+fn bridge_ws(
+    ws: WsStream,
+) -> (
+    impl tokio::io::AsyncRead + Send + Unpin + 'static,
+    impl tokio::io::AsyncWrite + Send + Unpin + 'static,
+    WsGuard,
+) {
+    use futures::{SinkExt, StreamExt};
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    use tokio_tungstenite::tungstenite::Message;
+
+    let (client_io, bridge_io) = tokio::io::duplex(256 * 1024);
+    let (c_r, c_w) = tokio::io::split(client_io);
+    let (b_r, mut b_w) = tokio::io::split(bridge_io);
+    let (mut sink, mut stream) = ws.split();
+
+    let inbound = tokio::spawn(async move {
+        while let Some(Ok(msg)) = stream.next().await {
+            match msg {
+                Message::Text(t) => {
+                    let mut line = t.replace(['\r', '\n'], " ");
+                    line.push('\n');
+                    if b_w.write_all(line.as_bytes()).await.is_err() {
+                        break;
+                    }
+                }
+                Message::Close(_) => break,
+                _ => {}
+            }
+        }
+        let _ = b_w.shutdown().await;
+    });
+    let outbound = tokio::spawn(async move {
+        let mut rd = BufReader::new(b_r);
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match rd.read_line(&mut line).await {
+                Ok(0) | Err(_) => {
+                    let _ = sink.send(Message::Close(None)).await;
+                    break;
+                }
+                Ok(_) => {
+                    let t = line.trim();
+                    if !t.is_empty() && sink.send(Message::Text(t.to_string())).await.is_err() {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+    (c_r, c_w, WsGuard(vec![inbound, outbound]))
+}
+
+/// Connect to a remote ACP agent over a WebSocket (`ws://` or `wss://`), one JSON-RPC
+/// message per text frame (frames capped at 1 MiB). TLS certificates are verified.
+pub async fn connect_ws(
+    url: &str,
+    bearer: Option<&str>,
+    opts: ClientOptions,
+) -> Result<(AcpClient, mpsc::Receiver<ClientEvent>), AcpError> {
+    use tokio_tungstenite::tungstenite::{
+        Error as WsError, client::IntoClientRequest, protocol::WebSocketConfig,
+    };
+
+    if !(url.starts_with("ws://") || url.starts_with("wss://")) {
+        return Err(AcpError::Protocol(format!(
+            "unsupported url scheme (expected ws:// or wss://): {url}"
+        )));
+    }
+    let mut req = url
+        .into_client_request()
+        .map_err(|e| AcpError::Protocol(format!("websocket: {e}")))?;
+    if let Some(t) = bearer {
+        let v = format!("Bearer {t}")
+            .parse()
+            .map_err(|e| AcpError::Protocol(format!("websocket: invalid bearer token: {e}")))?;
+        req.headers_mut().insert("Authorization", v);
+    }
+    let cfg = WebSocketConfig {
+        max_message_size: Some(1 << 20),
+        max_frame_size: Some(1 << 20),
+        ..Default::default()
+    };
+    let (ws, _resp) = tokio_tungstenite::connect_async_tls_with_config(req, Some(cfg), false, None)
+        .await
+        .map_err(|e| match e {
+            WsError::Http(resp) => AcpError::Protocol(format!(
+                "websocket handshake rejected: HTTP {}",
+                resp.status()
+            )),
+            e => AcpError::Protocol(format!("websocket: {e}")),
+        })?;
+    let (r, w, guard) = bridge_ws(ws);
+    connect_inner(r, w, opts, Some(Box::new(guard))).await
 }
