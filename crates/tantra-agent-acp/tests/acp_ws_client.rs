@@ -173,6 +173,33 @@ async fn ws_text_turn_with_bearer() {
 }
 
 #[tokio::test]
+async fn idle_client_answers_server_ping() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let (stream, _) = listener.accept().await.unwrap();
+        let mut ws = tokio_tungstenite::accept_async(stream).await.unwrap();
+        ws.send(Message::Ping(b"hb".to_vec())).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while let Some(Ok(m)) = ws.next().await {
+                if let Message::Pong(p) = m {
+                    return Some(p);
+                }
+            }
+            None
+        })
+        .await
+    });
+    // The handshake never completes (no ACP server), so run connect in the background.
+    let url = format!("ws://{addr}");
+    let _client = tokio::spawn(async move {
+        let _ = connect_ws(&url, None, ClientOptions::default()).await;
+    });
+    let got = server.await.unwrap().expect("no pong within 2s");
+    assert_eq!(got, Some(b"hb".to_vec()));
+}
+
+#[tokio::test]
 async fn rejects_non_ws_scheme() {
     let r = connect_ws("http://x", None, ClientOptions::default()).await;
     assert!(matches!(r, Err(AcpError::Protocol(_))));

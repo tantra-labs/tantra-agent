@@ -417,6 +417,9 @@ fn bridge_ws(
     let (c_r, c_w) = tokio::io::split(client_io);
     let (b_r, mut b_w) = tokio::io::split(bridge_io);
     let (mut sink, mut stream) = ws.split();
+    // Server pings are answered through the sink task: tungstenite only flushes
+    // its queued pong on the next sink write, so an idle client would never reply.
+    let (ping_tx, mut ping_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(8);
 
     let inbound = tokio::spawn(async move {
         while let Some(Ok(msg)) = stream.next().await {
@@ -428,6 +431,9 @@ fn bridge_ws(
                         break;
                     }
                 }
+                Message::Ping(payload) => {
+                    let _ = ping_tx.try_send(payload);
+                }
                 Message::Close(_) => break,
                 _ => {}
             }
@@ -438,15 +444,26 @@ fn bridge_ws(
         let mut rd = BufReader::new(b_r);
         let mut line = String::new();
         loop {
-            line.clear();
-            match rd.read_line(&mut line).await {
-                Ok(0) | Err(_) => {
-                    let _ = sink.send(Message::Close(None)).await;
-                    break;
-                }
-                Ok(_) => {
-                    let t = line.trim();
-                    if !t.is_empty() && sink.send(Message::Text(t.to_string())).await.is_err() {
+            // `line` is cleared only after a full line is handled: a ping wakeup
+            // may cancel `read_line` mid-line and the partial bytes must survive.
+            tokio::select! {
+                read = rd.read_line(&mut line) => match read {
+                    Ok(0) | Err(_) => {
+                        let _ = sink.send(Message::Close(None)).await;
+                        break;
+                    }
+                    Ok(_) => {
+                        let t = line.trim();
+                        if !t.is_empty()
+                            && sink.send(Message::Text(t.to_string())).await.is_err()
+                        {
+                            break;
+                        }
+                        line.clear();
+                    }
+                },
+                Some(payload) = ping_rx.recv() => {
+                    if sink.send(Message::Pong(payload)).await.is_err() {
                         break;
                     }
                 }
