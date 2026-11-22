@@ -10,6 +10,7 @@ Per workspace rule `.agents/rules/gap-tracking.md`:
 | # | Title | Area |
 |---|-------|------|
 | [0009](0009-chart-series-ref-not-delivered-to-chat-clients.md) | `DisplayBlock::Chart` series refs are not resolvable by chat clients | `tantra-agent-chat` / `ref_store` (consumer: tantra-ui TUI analysis page) |
+| [0010](0010-structured-thought-token-and-diff-events.md) | `SessionEvent` lacks structured `thought_delta`, `token_usage`, `raw_input`/`raw_output`, and strategy diff metadata | `tantra-agent-chat` / `tantra-agent-llm` (consumer: `tantra-ui-web` plan `0020`, paired with `tantra-runtime` gap `0014`) |
 
 ## Closed Gaps
 
