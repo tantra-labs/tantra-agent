@@ -46,3 +46,19 @@ JSONC (comments and trailing commas allowed). Unknown keys (e.g. opencode's `npm
 ## API (`tantra-agent-llm`)
 `parse_config`, `resolve_value`, `merge`, `config_paths`, `load_config` (startup-only sync IO: call before the
 async runtime / at startup), `ConfigCatalog::build(&LoadedConfig, env) -> StaticCatalog`.
+`resolve_runtime(&LoadedConfig, env) -> Result<Option<RuntimeEndpoint>, ConfigError>` resolves the `runtime` block below.
+
+## `runtime` block
+Clients (CLI, TUI, `tantra-agent-mcp`) read the runtime REST endpoint from the same file:
+
+```jsonc
+"runtime": { "url": "http://127.0.0.1:8000", "token": "{file:~/.config/tantra/runtime.token}" }
+```
+
+- `url` and `token` accept `{env:VAR}` / `{file:path}`; the token is trimmed and an empty token means none.
+- A block without `url` is ignored. Project and user files merge field by field; project wins.
+- The token is redacted in `Debug` and never logged.
+- Precedence for both base URL and token: (1) explicit flags (`--server`, `--token-file`);
+  (2) the `runtime` block; (3) the built-in default (`http://127.0.0.1:8000`, no token).
+- `TANTRA_RUNTIME_URL` / `TANTRA_RUNTIME_TOKEN` are deprecated: `tantra-agent-mcp` falls back to them
+  only when no `runtime` block resolves, and logs a warning.

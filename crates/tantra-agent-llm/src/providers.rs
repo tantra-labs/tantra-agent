@@ -80,6 +80,75 @@ pub struct TantraConfig {
     /// Providers by key.
     #[serde(default)]
     pub provider: BTreeMap<String, ProviderEntry>,
+    /// Runtime REST endpoint used by clients (CLI, TUI, MCP).
+    #[serde(default)]
+    pub runtime: Option<RuntimeBlock>,
+}
+
+/// Raw `runtime` block; `token` is redacted in `Debug`.
+#[derive(Clone, Default, Deserialize)]
+pub struct RuntimeBlock {
+    /// Runtime base URL (e.g. `http://127.0.0.1:8000`); may be an `{env:}`/`{file:}` reference.
+    pub url: Option<String>,
+    /// Bearer token (usually an `{env:VAR}` / `{file:path}` reference).
+    pub token: Option<String>,
+}
+
+impl fmt::Debug for RuntimeBlock {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RuntimeBlock")
+            .field("url", &self.url)
+            .field("token", &self.token.as_ref().map(|_| "[REDACTED]"))
+            .finish()
+    }
+}
+
+/// A resolved runtime endpoint; `token` is redacted in `Debug`.
+#[derive(Clone, PartialEq, Eq)]
+pub struct RuntimeEndpoint {
+    /// Runtime base URL.
+    pub url: String,
+    /// Bearer token, if any.
+    pub token: Option<String>,
+}
+
+impl fmt::Debug for RuntimeEndpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RuntimeEndpoint")
+            .field("url", &self.url)
+            .field("token", &self.token.as_ref().map(|_| "[REDACTED]"))
+            .finish()
+    }
+}
+
+/// Resolve the `runtime` block (`{env:}`/`{file:}` against `loaded.base_dir`).
+/// Returns `None` when there is no block or it has no `url`.
+pub fn resolve_runtime(
+    loaded: &LoadedConfig,
+    env: &dyn Fn(&str) -> Option<String>,
+) -> Result<Option<RuntimeEndpoint>, ConfigError> {
+    let Some(block) = loaded.config.runtime.as_ref() else {
+        return Ok(None);
+    };
+    let Some(raw_url) = block.url.as_deref() else {
+        return Ok(None);
+    };
+    let url = resolve_value(raw_url, &loaded.base_dir, env)?
+        .trim()
+        .to_string();
+    if url.is_empty() {
+        return Ok(None);
+    }
+    let token = match block.token.as_deref() {
+        Some(raw) => {
+            let t = resolve_value(raw, &loaded.base_dir, env)?
+                .trim()
+                .to_string();
+            if t.is_empty() { None } else { Some(t) }
+        }
+        None => None,
+    };
+    Ok(Some(RuntimeEndpoint { url, token }))
 }
 
 /// One provider entry.
@@ -223,6 +292,14 @@ pub fn merge(user: TantraConfig, project: TantraConfig) -> TantraConfig {
         schema: project.schema.or(user.schema),
         model: project.model.or(user.model),
         provider: providers,
+        runtime: match (user.runtime, project.runtime) {
+            (u, None) => u,
+            (None, p) => p,
+            (Some(u), Some(p)) => Some(RuntimeBlock {
+                url: p.url.or(u.url),
+                token: p.token.or(u.token),
+            }),
+        },
     }
 }
 

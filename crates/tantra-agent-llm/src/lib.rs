@@ -29,8 +29,8 @@ pub mod providers;
 pub use catalog::{CatalogError, ModelCatalog, ModelInfo, StaticCatalog};
 pub use openai_compat::{FreeTierPolicy, OpenAiCompatibleProvider, is_free_tier_model};
 pub use providers::{
-    ConfigCatalog, ConfigError, LoadedConfig, TantraConfig, config_paths, load_config, merge,
-    parse_config, resolve_value,
+    ConfigCatalog, ConfigError, LoadedConfig, RuntimeBlock, RuntimeEndpoint, TantraConfig,
+    config_paths, load_config, merge, parse_config, resolve_runtime, resolve_value,
 };
 
 /// A cryptographic hash of a prompt, used for deterministic replay.

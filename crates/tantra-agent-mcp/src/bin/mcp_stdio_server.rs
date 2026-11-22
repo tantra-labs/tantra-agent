@@ -3,7 +3,7 @@
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut server = tantra_agent_mcp::McpServer::new();
-    if let Some(client) = tantra_agent_mcp::RuntimeLibraryClient::from_env() {
+    if let Some(client) = tantra_agent_mcp::RuntimeLibraryClient::discover() {
         let client = std::sync::Arc::new(client);
         server = server
             .with_library_port(client.clone())

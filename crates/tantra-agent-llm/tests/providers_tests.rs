@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use tantra_agent_llm::providers::ProviderOptions;
 use tantra_agent_llm::{
     ConfigCatalog, ConfigError, LoadedConfig, ModelCatalog, config_paths, merge, parse_config,
-    resolve_value,
+    resolve_runtime, resolve_value,
 };
 
 const GOLDEN: &str = r#"
@@ -151,4 +151,78 @@ fn debug_redacts_api_key() {
     let dbg = format!("{opts:?}");
     assert!(!dbg.contains("sk-very-secret"));
     assert!(dbg.contains("[REDACTED]"));
+}
+
+fn loaded_in(text: &str, dir: &Path) -> LoadedConfig {
+    LoadedConfig {
+        config: parse_config(text).expect("parse"),
+        sources: vec![],
+        base_dir: dir.to_path_buf(),
+    }
+}
+
+#[test]
+fn runtime_block_parses() {
+    let c = parse_config(r#"{"runtime":{"url":"http://h:1","token":"t"}}"#).expect("parse");
+    let r = c.runtime.expect("runtime");
+    assert_eq!(r.url.as_deref(), Some("http://h:1"));
+    assert_eq!(r.token.as_deref(), Some("t"));
+}
+
+#[test]
+fn runtime_merge_project_wins_field_by_field() {
+    let user = parse_config(r#"{"runtime":{"url":"http://user","token":"ut"}}"#).expect("u");
+    let project = parse_config(r#"{"runtime":{"url":"http://proj"}}"#).expect("p");
+    let m = merge(user, project).runtime.expect("runtime");
+    assert_eq!(m.url.as_deref(), Some("http://proj"));
+    assert_eq!(m.token.as_deref(), Some("ut"));
+}
+
+#[test]
+fn resolve_runtime_env_and_file() {
+    let d = tmp("runtime-file");
+    std::fs::write(d.join("rt.token"), "  filetok\n").expect("write");
+    let l = loaded_in(
+        r#"{"runtime":{"url":"{env:RT_URL}","token":"{file:rt.token}"}}"#,
+        &d,
+    );
+    let m = env_map(&[("RT_URL", "http://rt:8000")]);
+    let e = resolve_runtime(&l, &|k| m.get(k).cloned())
+        .expect("resolve")
+        .expect("some");
+    assert_eq!(e.url, "http://rt:8000");
+    assert_eq!(e.token.as_deref(), Some("filetok"));
+    let l2 = loaded_in(
+        r#"{"runtime":{"url":"http://x","token":"{env:EMPTY}"}}"#,
+        &d,
+    );
+    let m2 = env_map(&[("EMPTY", "  ")]);
+    let e2 = resolve_runtime(&l2, &|k| m2.get(k).cloned())
+        .expect("resolve")
+        .expect("some");
+    assert_eq!(e2.token, None);
+}
+
+#[test]
+fn resolve_runtime_missing_url_is_none() {
+    let l = loaded(r#"{"runtime":{"token":"t"}}"#);
+    assert!(resolve_runtime(&l, &|_| None).expect("ok").is_none());
+    assert!(
+        resolve_runtime(&loaded("{}"), &|_| None)
+            .expect("ok")
+            .is_none()
+    );
+}
+
+#[test]
+fn runtime_debug_redacts_token() {
+    let c = parse_config(r#"{"runtime":{"url":"http://h","token":"sekret"}}"#).expect("parse");
+    assert!(!format!("{c:?}").contains("sekret"));
+    let l = loaded_in(
+        r#"{"runtime":{"url":"http://h","token":"sekret"}}"#,
+        Path::new("."),
+    );
+    let e = resolve_runtime(&l, &|_| None).expect("ok").expect("some");
+    let dbg = format!("{e:?}");
+    assert!(!dbg.contains("sekret") && dbg.contains("[REDACTED]"));
 }

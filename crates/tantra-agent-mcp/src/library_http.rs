@@ -17,6 +17,18 @@ use tantra_agent_core::strategy_loop::{
     StrategyLoopSweepRequest,
 };
 
+/// Routes this client calls as `(METHOD, path)`, relative to `/api/v2`, in OpenAPI `{param}`
+/// spelling. Checked against the runtime's `openapi.v2.json` by `tests/runtime_contract.rs`.
+pub const RUNTIME_ROUTES: &[(&str, &str)] = &[
+    ("GET", "/studies/library/entries"),
+    ("GET", "/studies/library/entries/{id}"),
+    ("POST", "/studies/indicators/compute"),
+    ("POST", "/studies/signal-study"),
+    ("POST", "/studies/strategy-loop/evaluate"),
+    ("POST", "/studies/strategy-loop/sweep"),
+    ("POST", "/studies/strategy-loop/recommend-hedge"),
+];
+
 /// Maximum accepted response body size (16 MiB).
 pub const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 
@@ -76,6 +88,41 @@ impl RuntimeLibraryClient {
                 None
             }
         }
+    }
+
+    /// Build from the `runtime` block of a loaded `tantra.jsonc`; `None` when absent or invalid.
+    pub fn from_config(loaded: &tantra_agent_llm::LoadedConfig) -> Option<Self> {
+        let env = |k: &str| std::env::var(k).ok();
+        let endpoint = match tantra_agent_llm::resolve_runtime(loaded, &env) {
+            Ok(Some(e)) => e,
+            Ok(None) => return None,
+            Err(e) => {
+                tracing::warn!(error = %e, "tantra.jsonc runtime block unusable");
+                return None;
+            }
+        };
+        match Self::new(endpoint.url, endpoint.token) {
+            Ok(c) => Some(c),
+            Err(e) => {
+                tracing::warn!(error = %e, "runtime library client disabled");
+                None
+            }
+        }
+    }
+
+    /// Discover the runtime: `tantra.jsonc` `runtime` block first, then the deprecated
+    /// `TANTRA_RUNTIME_URL` / `TANTRA_RUNTIME_TOKEN` environment variables.
+    pub fn discover() -> Option<Self> {
+        if let Ok(loaded) = tantra_agent_llm::load_config(None)
+            && let Some(c) = Self::from_config(&loaded)
+        {
+            return Some(c);
+        }
+        let c = Self::from_env()?;
+        tracing::warn!(
+            "TANTRA_RUNTIME_URL/TANTRA_RUNTIME_TOKEN are deprecated; use the `runtime` block in tantra.jsonc"
+        );
+        Some(c)
     }
 
     fn authed(&self, rb: reqwest::RequestBuilder) -> reqwest::RequestBuilder {
