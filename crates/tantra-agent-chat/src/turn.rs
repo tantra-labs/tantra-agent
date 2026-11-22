@@ -29,6 +29,33 @@ use crate::tool::{PlanContext, ToolContext, ToolSet};
 
 const MAX_TOOL_OUTPUT_BYTES: usize = 64 * 1024; // 64 KiB cap per tool result
 
+fn utf8_prefix_end(s: &str, max_bytes: usize) -> usize {
+    if s.len() <= max_bytes {
+        return s.len();
+    }
+    let mut end = max_bytes;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    end
+}
+
+fn bound_json_payload(value: &Value) -> Value {
+    match serde_json::to_string(value) {
+        Ok(serialized) if serialized.len() <= MAX_TOOL_OUTPUT_BYTES => value.clone(),
+        Ok(serialized) => {
+            let preview_end = utf8_prefix_end(&serialized, 4096);
+            serde_json::json!({
+                "_truncated": true,
+                "bytes": serialized.len(),
+                "max_bytes": MAX_TOOL_OUTPUT_BYTES,
+                "preview": &serialized[..preview_end],
+            })
+        }
+        Err(_) => Value::Null,
+    }
+}
+
 /// Point at which a turn was cancelled.
 #[derive(Debug, Clone)]
 pub enum CancelPoint {
@@ -65,6 +92,7 @@ pub(crate) enum TurnState {
     Committing {
         round: u32,
         message: ChatMessage,
+        thinking: String,
         stop_reason: StopReason,
         usage: Usage,
     },
@@ -284,9 +312,11 @@ pub async fn run_turn(
                 match stream_res {
                     Ok(mut stream) => {
                         let mut accumulated_text = String::new();
+                        let mut accumulated_thinking = String::new();
                         let mut assembled_tool_calls = Vec::new();
                         let mut stream_stop_reason = StopReason::EndTurn;
                         let mut stream_usage = Usage::default();
+                        let mut emitted_usage = false;
 
                         let mut stream_failed_err = None;
 
@@ -308,6 +338,7 @@ pub async fn run_turn(
                                         .await;
                                 }
                                 Ok(ChatStreamEvent::ThinkingDelta { text }) => {
+                                    accumulated_thinking.push_str(&text);
                                     let _ = event_tx
                                         .send(SessionEvent::ThinkingDelta {
                                             turn: turn_id,
@@ -354,6 +385,7 @@ pub async fn run_turn(
                                     });
                                 }
                                 Ok(ChatStreamEvent::Usage(u)) => {
+                                    emitted_usage = true;
                                     stream_usage = u;
                                     let _ = event_tx
                                         .send(SessionEvent::Usage {
@@ -369,7 +401,9 @@ pub async fn run_turn(
                                     usage,
                                 }) => {
                                     stream_stop_reason = stop_reason;
-                                    stream_usage = usage;
+                                    if usage.total_tokens() > 0 || !emitted_usage {
+                                        stream_usage = usage;
+                                    }
                                     if !message.tool_calls.is_empty()
                                         && assembled_tool_calls.is_empty()
                                     {
@@ -420,8 +454,17 @@ pub async fn run_turn(
                             }
                         }
 
-                        total_usage.input_tokens += stream_usage.input_tokens;
-                        total_usage.output_tokens += stream_usage.output_tokens;
+                        if !emitted_usage && stream_usage.total_tokens() > 0 {
+                            let _ = event_tx
+                                .send(SessionEvent::Usage {
+                                    turn: turn_id,
+                                    round,
+                                    usage: stream_usage,
+                                })
+                                .await;
+                        }
+
+                        total_usage.accumulate(stream_usage);
 
                         let assistant_msg = if !assembled_tool_calls.is_empty() {
                             ChatMessage::assistant_with_tools(
@@ -435,6 +478,7 @@ pub async fn run_turn(
                         turn_state = TurnState::Committing {
                             round,
                             message: assistant_msg,
+                            thinking: accumulated_thinking,
                             stop_reason: stream_stop_reason,
                             usage: stream_usage,
                         };
@@ -472,6 +516,7 @@ pub async fn run_turn(
             TurnState::Committing {
                 round,
                 message,
+                thinking,
                 stop_reason,
                 usage,
             } => {
@@ -481,13 +526,17 @@ pub async fn run_turn(
                 let req_hash = hash_request(system_prompt, &tool_specs, &msgs_json, &opts_json);
 
                 let next_seq = (history.len() as u64) + 1;
+                let mut content = serde_json::json!({
+                    "text": message.content,
+                    "tool_calls": message.tool_calls,
+                });
+                if !thinking.is_empty() {
+                    content["thinking"] = Value::String(thinking);
+                }
                 let persisted_assistant = PersistedMessage {
                     seq: next_seq,
                     role: "assistant".to_string(),
-                    content: serde_json::json!({
-                        "text": message.content,
-                        "tool_calls": message.tool_calls,
-                    }),
+                    content,
                     request_hash: Some(req_hash),
                     input_tokens: Some(usage.input_tokens),
                     output_tokens: Some(usage.output_tokens),
@@ -562,6 +611,7 @@ pub async fn run_turn(
                                 elapsed_ms: 0,
                                 display: None,
                                 blocks: Vec::new(),
+                                raw_output: None,
                             })
                             .await;
 
@@ -628,6 +678,7 @@ pub async fn run_turn(
                                                 elapsed_ms: 0,
                                                 display: None,
                                                 blocks: Vec::new(),
+                                                raw_output: None,
                                             })
                                             .await;
 
@@ -654,6 +705,7 @@ pub async fn run_turn(
                                                 elapsed_ms: 0,
                                                 display: None,
                                                 blocks: Vec::new(),
+                                                raw_output: None,
                                             })
                                             .await;
 
@@ -681,6 +733,7 @@ pub async fn run_turn(
                                 elapsed_ms: 0,
                                 display: None,
                                 blocks: Vec::new(),
+                                raw_output: None,
                             })
                             .await;
 
@@ -692,6 +745,8 @@ pub async fn run_turn(
                         continue;
                     }
 
+                    let bounded_input = bound_json_payload(&input_val);
+
                     // Execute tool
                     let _ = event_tx
                         .send(SessionEvent::ToolStarted {
@@ -700,6 +755,7 @@ pub async fn run_turn(
                             name: tool_name.clone(),
                             summary: plan.summary,
                             eager: false,
+                            raw_input: Some(bounded_input),
                         })
                         .await;
 
@@ -735,14 +791,13 @@ pub async fn run_turn(
 
                     match exec_res {
                         Ok(output) => {
+                            let bounded_output = bound_json_payload(&output.payload);
                             let mut payload_str =
                                 serde_json::to_string(&output.payload).unwrap_or_default();
                             if payload_str.len() > MAX_TOOL_OUTPUT_BYTES {
-                                payload_str.truncate(MAX_TOOL_OUTPUT_BYTES);
-                                payload_str.push_str(
-                                    "
-[truncated: content exceeded 64 KiB]",
-                                );
+                                let end = utf8_prefix_end(&payload_str, MAX_TOOL_OUTPUT_BYTES);
+                                payload_str.truncate(end);
+                                payload_str.push_str("\n[truncated: content exceeded 64 KiB]");
                             }
 
                             let outcome = if output.is_error() {
@@ -762,6 +817,7 @@ pub async fn run_turn(
                                     blocks: crate::event::display_blocks_from_payload(
                                         &output.payload,
                                     ),
+                                    raw_output: Some(bounded_output),
                                 })
                                 .await;
 
@@ -782,8 +838,7 @@ pub async fn run_turn(
                                 entry.1 += 1;
                                 if entry.1 >= 3 {
                                     err_str.push_str(
-                                        "
-This tool has failed repeatedly; stop retrying and tell the user.",
+                                        "\nThis tool has failed repeatedly; stop retrying and tell the user.",
                                     );
                                 }
                             } else {
@@ -799,6 +854,7 @@ This tool has failed repeatedly; stop retrying and tell the user.",
                                     elapsed_ms,
                                     display: None,
                                     blocks: Vec::new(),
+                                    raw_output: None,
                                 })
                                 .await;
 

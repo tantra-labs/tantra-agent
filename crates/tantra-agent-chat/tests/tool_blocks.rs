@@ -4,7 +4,7 @@
 use serde_json::json;
 use tantra_agent_chat::event::display_blocks_from_payload;
 use tantra_agent_chat::{CallId, SessionEvent, ToolOutcome, TurnId};
-use tantra_agent_core::{DisplayBlock, MetricItem, TantraResultEnvelope};
+use tantra_agent_core::{CodeDiffHunk, DisplayBlock, MetricItem, TantraResultEnvelope};
 
 #[test]
 fn blocks_are_extracted_from_a_result_envelope_payload() {
@@ -21,12 +21,23 @@ fn blocks_are_extracted_from_a_result_envelope_payload() {
                 columns: vec!["Side".into()],
                 rows: vec![vec!["BUY".into()]],
             },
+            DisplayBlock::CodeDiff {
+                title: "EMA Entry Diff".into(),
+                lang: "python".into(),
+                code: "if ema_fast > ema_slow:\n    buy()".into(),
+                hunks: vec![CodeDiffHunk {
+                    id: "h1".into(),
+                    header: "@@ -1,1 +1,2 @@".into(),
+                    lines: vec!["+    buy()".into()],
+                }],
+            },
         ]);
     let payload = serde_json::to_value(env).unwrap();
     let blocks = display_blocks_from_payload(&payload);
-    assert_eq!(blocks.len(), 2);
+    assert_eq!(blocks.len(), 3);
     assert!(matches!(blocks[0], DisplayBlock::MetricGrid { .. }));
     assert!(matches!(blocks[1], DisplayBlock::Table { ref title, .. } if title == "Trades"));
+    assert!(matches!(blocks[2], DisplayBlock::CodeDiff { ref lang, .. } if lang == "python"));
 }
 
 #[test]
@@ -43,7 +54,7 @@ fn non_envelope_or_malformed_payloads_yield_no_blocks() {
 }
 
 #[test]
-fn tool_finished_serializes_blocks_only_when_present() {
+fn tool_finished_serializes_blocks_and_raw_output_only_when_present() {
     let ev = SessionEvent::ToolFinished {
         turn: TurnId(1),
         call_id: CallId::new("c1".to_string()),
@@ -52,9 +63,11 @@ fn tool_finished_serializes_blocks_only_when_present() {
         elapsed_ms: 5,
         display: None,
         blocks: vec![],
+        raw_output: None,
     };
     let v = serde_json::to_value(&ev).unwrap();
     assert!(v.get("blocks").is_none());
+    assert!(v.get("raw_output").is_none());
 
     let ev = SessionEvent::ToolFinished {
         turn: TurnId(1),
@@ -67,7 +80,9 @@ fn tool_finished_serializes_blocks_only_when_present() {
             level: "info".into(),
             message: "ok".into(),
         }],
+        raw_output: Some(json!({ "sharpe": "1.44" })),
     };
     let v = serde_json::to_value(&ev).unwrap();
     assert_eq!(v["blocks"][0]["type"], "alert");
+    assert_eq!(v["raw_output"]["sharpe"], "1.44");
 }

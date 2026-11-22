@@ -255,6 +255,26 @@ pub struct Usage {
     pub cache_write_tokens: Option<u32>,
 }
 
+impl Usage {
+    /// Total tokens across prompt input and generated output.
+    pub const fn total_tokens(&self) -> u32 {
+        self.input_tokens.saturating_add(self.output_tokens)
+    }
+
+    /// Accumulate token counts from another usage sample into `self`.
+    pub fn accumulate(&mut self, other: Usage) {
+        self.input_tokens = self.input_tokens.saturating_add(other.input_tokens);
+        self.output_tokens = self.output_tokens.saturating_add(other.output_tokens);
+        if let Some(read) = other.cache_read_tokens {
+            self.cache_read_tokens = Some(self.cache_read_tokens.unwrap_or(0).saturating_add(read));
+        }
+        if let Some(write) = other.cache_write_tokens {
+            self.cache_write_tokens =
+                Some(self.cache_write_tokens.unwrap_or(0).saturating_add(write));
+        }
+    }
+}
+
 /// Termination reason for model generation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

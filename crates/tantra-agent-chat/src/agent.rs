@@ -7,7 +7,7 @@ use chrono::Utc;
 use tokio::sync::mpsc;
 
 use tantra_agent_core::{
-    MemoryStore, Placement, ProfileBudget, PromptSection, RuntimeMode, SessionScope, SessionStore,
+    MemoryStore, Placement, ProfileBudget, PromptSection, SessionScope, SessionStore, StoreError,
     default_assemble,
 };
 use tantra_agent_llm::LlmProvider;
@@ -92,6 +92,14 @@ impl ChatAgent {
                 }
             }
             SessionSelector::Resume(id) => {
+                let info = self
+                    .session_store
+                    .get(id)
+                    .await
+                    .map_err(ChatError::from)?
+                    .ok_or_else(|| {
+                        ChatError::Store(StoreError::not_found(format!("session {id} not found")))
+                    })?;
                 let msgs = self
                     .session_store
                     .messages(id)
@@ -101,7 +109,7 @@ impl ChatAgent {
                     .map(|(_, pm)| pm)
                     .collect();
 
-                let scope = SessionScope::new("default", RuntimeMode::Live);
+                let scope = SessionScope::new(info.profile, info.mode);
                 (Some(id), scope, true, msgs)
             }
         };

@@ -10,7 +10,6 @@ Per workspace rule `.agents/rules/gap-tracking.md`:
 | # | Title | Area |
 |---|-------|------|
 | [0009](0009-chart-series-ref-not-delivered-to-chat-clients.md) | `DisplayBlock::Chart` series refs are not resolvable by chat clients | `tantra-agent-chat` / `ref_store` (consumer: tantra-ui TUI analysis page) |
-| [0010](0010-structured-thought-token-and-diff-events.md) | `SessionEvent` lacks structured `thought_delta`, `token_usage`, `raw_input`/`raw_output`, and strategy diff metadata | `tantra-agent-chat` / `tantra-agent-llm` (consumer: `tantra-ui-web` plan `0020`, paired with `tantra-runtime` gap `0014`) |
 
 ## Closed Gaps
 
@@ -24,3 +23,4 @@ Per workspace rule `.agents/rules/gap-tracking.md`:
 | 0006 | Runtime-agent monitor scheduler bridge not implemented | plan 0009 Phase D 2026-11-14 — `tantra-runtime-persistence::monitor::MonitorSchedulerBridge` over the agent `JobScheduler`/`JobStore` ports (6 tests), commit `634de2c` |
 | 0007 | Cache-hit regression tests for prompt caching not implemented | plan 0009 Phase C 2026-11-14 — `tests/prompt_cache_tests.rs` (agent-core) + `tests/renderer_cache_tests.rs` (agent-prompt), commit `7f9d480` |
 | 0008 | Track 4 regime/changepoint/copula/permutation engines not implemented | plan 0007 Track 4 Ph 9–10 2026-11-14 — `tantra-agent-analytics::{regime/hmm, changepoint, copula, validation::permutation_*}` + MCP tools `tantra_detect_regimes`/`tantra_change_point`/`tantra_copula_tail_risk`/`tantra_permutation_test`, commit `95ec800` |
+| 0010 | `SessionEvent` lacks structured `thought_delta`, `token_usage`, `raw_input`/`raw_output`, and strategy diff metadata | Closed 2026-11-22 (root plan `0020`, working tree verified) — `tantra-agent-core::{DisplayBlock::CodeDiff, CodeDiffHunk, SessionStore::{get_session,update_session,archive_session,delete_session}}`; `tantra-agent-llm` (`ChatStreamEvent::ThinkingDelta`/`Usage` + `openai_compat` reasoning & trailing usage); `tantra-agent-chat` (`SessionEvent::{ThinkingDelta,Usage}`, `ToolStarted::raw_input`, `ToolFinished::raw_output`, structured `CodeDiff` extraction). Verified: `code_diff_blocks` (1), `tool_blocks` (3), `unit_tests` (11), `openai_compat_tests` (6), `dependency_rules` (1), `fmt --check`, `clippy -D warnings`, `make prod` green. |

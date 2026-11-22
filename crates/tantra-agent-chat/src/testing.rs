@@ -36,6 +36,9 @@ impl InMemorySessionStore {
 impl SessionStore for InMemorySessionStore {
     async fn create(&self, s: NewSession) -> Result<SessionId, StoreError> {
         let mut sessions = self.sessions.lock().unwrap();
+        if sessions.contains_key(&s.id) {
+            return Err(StoreError::conflict(format!("session {} exists", s.id)));
+        }
         let info = SessionInfo {
             id: s.id,
             profile: s.profile,
@@ -51,17 +54,26 @@ impl SessionStore for InMemorySessionStore {
         Ok(s.id)
     }
 
+    async fn get(&self, id: SessionId) -> Result<Option<SessionInfo>, StoreError> {
+        let sessions = self.sessions.lock().unwrap();
+        Ok(sessions.get(&id).cloned())
+    }
+
     async fn append(
         &self,
         id: SessionId,
         msgs: &[PersistedMessage],
     ) -> Result<Vec<MessageSeq>, StoreError> {
+        let mut sessions = self.sessions.lock().unwrap();
         let mut messages = self.messages.lock().unwrap();
         let list = messages.entry(id).or_default();
         let mut seqs = Vec::new();
         for msg in msgs {
             list.push((msg.seq, msg.clone()));
             seqs.push(msg.seq);
+        }
+        if let Some(info) = sessions.get_mut(&id) {
+            info.updated_at = Utc::now();
         }
         Ok(seqs)
     }
@@ -126,6 +138,17 @@ impl SessionStore for InMemorySessionStore {
         }
     }
 
+    async fn set_archived(&self, id: SessionId, archived: bool) -> Result<(), StoreError> {
+        let mut sessions = self.sessions.lock().unwrap();
+        if let Some(info) = sessions.get_mut(&id) {
+            info.archived = archived;
+            info.updated_at = Utc::now();
+            Ok(())
+        } else {
+            Err(StoreError::not_found("session not found"))
+        }
+    }
+
     async fn update_provider(
         &self,
         id: SessionId,
@@ -144,11 +167,26 @@ impl SessionStore for InMemorySessionStore {
     }
 
     async fn truncate_after(&self, id: SessionId, seq: MessageSeq) -> Result<(), StoreError> {
+        let mut sessions = self.sessions.lock().unwrap();
         let mut messages = self.messages.lock().unwrap();
         if let Some(list) = messages.get_mut(&id) {
             list.retain(|(s, _)| *s <= seq);
         }
+        if let Some(info) = sessions.get_mut(&id) {
+            info.updated_at = Utc::now();
+        }
         Ok(())
+    }
+
+    async fn delete(&self, id: SessionId) -> Result<(), StoreError> {
+        let mut sessions = self.sessions.lock().unwrap();
+        if sessions.remove(&id).is_some() {
+            let mut messages = self.messages.lock().unwrap();
+            messages.remove(&id);
+            Ok(())
+        } else {
+            Err(StoreError::not_found("session not found"))
+        }
     }
 }
 

@@ -252,6 +252,9 @@ pub trait SessionStore: Send + Sync + 'static {
     /// Create a new session row.
     async fn create(&self, s: NewSession) -> Result<SessionId, StoreError>;
 
+    /// Fetch summary metadata for a single session by ID, if present.
+    async fn get(&self, id: SessionId) -> Result<Option<SessionInfo>, StoreError>;
+
     /// Append messages sequentially to a session.
     async fn append(
         &self,
@@ -274,6 +277,9 @@ pub trait SessionStore: Send + Sync + 'static {
     /// Rename session title.
     async fn rename(&self, id: SessionId, title: &str) -> Result<(), StoreError>;
 
+    /// Set or clear the archived flag on an existing session.
+    async fn set_archived(&self, id: SessionId, archived: bool) -> Result<(), StoreError>;
+
     /// Update provider and model for a session.
     async fn update_provider(
         &self,
@@ -284,6 +290,9 @@ pub trait SessionStore: Send + Sync + 'static {
 
     /// Truncate message history after a given sequence number.
     async fn truncate_after(&self, id: SessionId, seq: MessageSeq) -> Result<(), StoreError>;
+
+    /// Permanently delete a session and its persisted messages.
+    async fn delete(&self, id: SessionId) -> Result<(), StoreError>;
 }
 
 /// Strongly-typed identifier for a user memory entry.

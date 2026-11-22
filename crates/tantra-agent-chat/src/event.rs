@@ -297,6 +297,9 @@ pub enum SessionEvent {
         summary: String,
         /// Whether tool was started eagerly during model streaming.
         eager: bool,
+        /// Raw JSON arguments passed to the tool, for trace inspection (`ToolPayloadTree`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        raw_input: Option<serde_json::Value>,
     },
     /// Progress update reported by executing tool.
     ToolProgress {
@@ -324,9 +327,12 @@ pub enum SessionEvent {
         /// Optional UI display payload.
         display: Option<ToolDisplay>,
         /// Typed presentation blocks from the tool's `tantra/result/v1` envelope
-        /// (tables, metric grids, charts, alerts, overlay scenes), for UI rendering only.
+        /// (tables, metric grids, charts, alerts, overlay scenes, code diffs), for UI rendering only.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         blocks: Vec<DisplayBlock>,
+        /// Structured JSON result payload for inspectable trace trees (`ToolPayloadTree`).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        raw_output: Option<serde_json::Value>,
     },
 }
 

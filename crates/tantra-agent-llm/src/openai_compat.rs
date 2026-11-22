@@ -8,8 +8,10 @@
 //!   parses the response through [`tantra_agent_core::decision::DecisionParser::parse_str`]
 //!   (reused, never reimplemented).
 //! - [`OpenAiCompatibleProvider::chat_stream`] consumes the OpenAI SSE stream and
-//!   maps `delta.content` → [`ChatStreamEvent::TextDelta`] and `delta.tool_calls`
-//!   chunks → [`ChatStreamEvent::ToolCallChunk`] / [`ChatStreamEvent::ToolCallReady`].
+//!   maps `delta.reasoning_content` / `delta.reasoning` / `delta.thinking` →
+//!   [`ChatStreamEvent::ThinkingDelta`], `delta.content` → [`ChatStreamEvent::TextDelta`],
+//!   `delta.tool_calls` → [`ChatStreamEvent::ToolCallChunk`] /
+//!   [`ChatStreamEvent::ToolCallReady`], and `usage` → [`ChatStreamEvent::Usage`].
 //! - [`FreeTierPolicy`] guards against the router silently routing to a paid model:
 //!   `Off` (default), `Warn` (log only), or `Enforce` (reject).
 
@@ -197,6 +199,7 @@ impl OpenAiCompatibleProvider {
             "model": self.model,
             "messages": messages,
             "stream": true,
+            "stream_options": { "include_usage": true },
         });
         if let Some(temperature) = request.temperature {
             if let Some(f) = temperature.to_f64() {
@@ -384,9 +387,6 @@ impl SseState {
                     self.done = true;
                     return;
                 }
-                if self.finished {
-                    continue;
-                }
                 self.handle_chunk(data);
             }
         }
@@ -413,15 +413,33 @@ impl SseState {
             }
         }
 
-        if let Some(usage) = value.get("usage") {
+        // OpenAI-compatible providers with `stream_options.include_usage` often deliver `usage`
+        // on a trailing chunk with empty `choices` *after* `finish_reason`, so parse usage before
+        // gating on `self.finished`.
+        if let Some(usage) = value.get("usage").filter(|v| !v.is_null()) {
             self.usage.input_tokens = usage
                 .get("prompt_tokens")
                 .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u32;
+                .unwrap_or(self.usage.input_tokens as u64)
+                as u32;
             self.usage.output_tokens = usage
                 .get("completion_tokens")
                 .and_then(|v| v.as_u64())
-                .unwrap_or(0) as u32;
+                .unwrap_or(self.usage.output_tokens as u64)
+                as u32;
+            if let Some(cached) = usage
+                .pointer("/prompt_tokens_details/cached_tokens")
+                .or_else(|| usage.get("cached_tokens"))
+                .and_then(|v| v.as_u64())
+            {
+                self.usage.cache_read_tokens = Some(cached as u32);
+            }
+            self.pending
+                .push_back(Ok(ChatStreamEvent::Usage(self.usage)));
+        }
+
+        if self.finished {
+            return;
         }
 
         let Some(choice) = value
@@ -433,6 +451,15 @@ impl SseState {
         };
 
         if let Some(delta) = choice.get("delta") {
+            let thinking = ["reasoning_content", "reasoning", "thinking"]
+                .iter()
+                .find_map(|field| delta.get(*field).and_then(|v| v.as_str()))
+                .filter(|s| !s.is_empty());
+            if let Some(thinking_text) = thinking {
+                self.pending.push_back(Ok(ChatStreamEvent::ThinkingDelta {
+                    text: thinking_text.to_string(),
+                }));
+            }
             if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
                 if !content.is_empty() {
                     self.text.push_str(content);

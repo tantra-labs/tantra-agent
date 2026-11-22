@@ -127,6 +127,7 @@ async fn test_chat_stream_emits_text_and_message_end() {
         post(move |body: axum::body::Bytes| async move {
             let value = read_json_body(body).await;
             assert_eq!(value["stream"], true);
+            assert_eq!(value["stream_options"]["include_usage"], true);
             assert_eq!(value["messages"][0]["role"], "user");
             sse_response(sse_clone.clone())
         }),
@@ -164,6 +165,7 @@ async fn test_chat_stream_emits_text_and_message_end() {
     let message = end_message.expect("MessageEnd emitted");
     assert_eq!(message.content, "Hello");
     assert_eq!(usage.output_tokens, 5);
+    assert_eq!(usage.total_tokens(), 15);
 }
 
 #[tokio::test]
@@ -293,4 +295,62 @@ async fn test_chat_stream_serializes_multimodal_image_parts() {
         }
     }
     assert!(text.contains("bullish engulfing"));
+}
+
+#[tokio::test]
+async fn test_chat_stream_emits_thinking_deltas_and_trailing_usage_chunk() {
+    let sse = [
+        "data: {\"id\":\"1\",\"model\":\"deepseek-r1:free\",\"choices\":[{\"delta\":{\"reasoning_content\":\"Step 1: check RSI. \"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"1\",\"model\":\"deepseek-r1:free\",\"choices\":[{\"delta\":{\"reasoning\":\"Step 2: compare ATR.\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"1\",\"model\":\"deepseek-r1:free\",\"choices\":[{\"delta\":{\"content\":\"RSI is 61.\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"id\":\"1\",\"model\":\"deepseek-r1:free\",\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\n",
+        "data: {\"id\":\"1\",\"model\":\"deepseek-r1:free\",\"choices\":[],\"usage\":{\"prompt_tokens\":120,\"completion_tokens\":45,\"prompt_tokens_details\":{\"cached_tokens\":30}}}\n\n",
+        "data: [DONE]\n\n",
+    ]
+    .concat();
+    let sse_clone = sse.clone();
+
+    let app = Router::new().route(
+        "/v1/chat/completions",
+        post(move |_body: axum::body::Bytes| async move { sse_response(sse_clone.clone()) }),
+    );
+    let addr = spawn_router(app).await;
+
+    let provider =
+        OpenAiCompatibleProvider::new(format!("http://{addr}/v1"), None, "deepseek-r1:free");
+    let request = ChatRequest {
+        messages: vec![ChatMessage::user("check RSI")],
+        system_prompt: None,
+        tools: Vec::new(),
+        temperature: None,
+        max_tokens: None,
+    };
+
+    let mut stream = provider.chat_stream(&request).await.expect("chat_stream");
+    let mut thinking = Vec::new();
+    let mut texts = Vec::new();
+    let mut usage_events = Vec::new();
+
+    while let Some(event) = stream.next().await {
+        match event.expect("stream event") {
+            ChatStreamEvent::ThinkingDelta { text } => thinking.push(text),
+            ChatStreamEvent::TextDelta { text } => texts.push(text),
+            ChatStreamEvent::Usage(u) => usage_events.push(u),
+            _ => {}
+        }
+    }
+
+    assert_eq!(
+        thinking,
+        vec![
+            "Step 1: check RSI. ".to_string(),
+            "Step 2: compare ATR.".to_string(),
+        ]
+    );
+    assert_eq!(texts, vec!["RSI is 61.".to_string()]);
+    assert_eq!(usage_events.len(), 1);
+    assert_eq!(usage_events[0].input_tokens, 120);
+    assert_eq!(usage_events[0].output_tokens, 45);
+    assert_eq!(usage_events[0].cache_read_tokens, Some(30));
+    assert_eq!(usage_events[0].total_tokens(), 165);
 }

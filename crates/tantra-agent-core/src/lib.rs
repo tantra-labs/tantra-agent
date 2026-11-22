@@ -54,7 +54,8 @@ pub use prompt::{
 };
 pub use ref_store::{DataReferenceStore, RefEntry};
 pub use result::{
-    DisplayBlock, ExecutionMeta, MetricItem, ResultStatus, TantraResultEnvelope, ViewKind,
+    CodeDiffHunk, DisplayBlock, ExecutionMeta, MetricItem, ResultStatus, TantraResultEnvelope,
+    ViewKind,
 };
 pub use strategy_loop::{
     SceneAnnotateRequest, StrategyHedgeRequest, StrategyLoopBounds, StrategyLoopEvalRequest,

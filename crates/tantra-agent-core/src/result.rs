@@ -44,6 +44,17 @@ pub struct MetricItem {
     pub value: String,
 }
 
+/// A single hunk inside a [`DisplayBlock::CodeDiff`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct CodeDiffHunk {
+    /// Stable hunk identifier (e.g. `"hunk_1"`).
+    pub id: String,
+    /// Unified diff header line (e.g. `"@@ -1,4 +1,6 @@"`).
+    pub header: String,
+    /// Diff lines prefixed with `'+'`, `'-'`, or `' '`.
+    pub lines: Vec<String>,
+}
+
 /// Layout a client should open for a `present_view` result.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -132,6 +143,19 @@ pub enum DisplayBlock {
         /// Names of earlier tools whose results this view shows.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         include_tools: Vec<String>,
+    },
+    /// A structured strategy or code diff patch for interactive hunk review (`StrategyDiffCard`).
+    CodeDiff {
+        /// Card title (e.g. `"EMA Crossover v2"`).
+        title: String,
+        /// Target language identifier (e.g. `"python"` or `"pine"`).
+        lang: String,
+        /// Full resulting strategy/code snippet when available.
+        #[serde(default, skip_serializing_if = "String::is_empty")]
+        code: String,
+        /// Structured diff hunks for per-hunk accept/reject controls.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        hunks: Vec<CodeDiffHunk>,
     },
 }
 
