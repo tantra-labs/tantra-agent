@@ -101,6 +101,10 @@ pub enum DisplayBlock {
         chart_type: String,
         /// `$tantra/ref/...` URI of the underlying series.
         series_ref: String,
+        /// Bounded, resolved `(timestamp_sec, decimal_string)` series points
+        /// populated when delivering blocks to chat clients.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        series: Vec<(i64, String)>,
     },
     /// A text alert of `"info"`, `"warning"`, or `"critical"` severity.
     Alert {

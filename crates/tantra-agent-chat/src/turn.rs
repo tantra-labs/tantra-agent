@@ -9,7 +9,7 @@ use futures::StreamExt;
 use serde_json::Value;
 use tokio::sync::{mpsc, oneshot};
 
-use tantra_agent_core::{PersistedMessage, SessionId, SessionStore, ToolError};
+use tantra_agent_core::{PersistedMessage, RefReader, SessionId, SessionStore, ToolError};
 use tantra_agent_llm::{
     ChatMessage, ChatRequest, ChatRole, ChatStreamEvent, LlmProvider, LlmToolCall, LlmToolResult,
     MessagePart, StopReason, Usage,
@@ -107,7 +107,7 @@ pub(crate) enum TurnState {
 }
 
 /// Configuration parameters for conversational turn loops.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct TurnConfig {
     /// Maximum autonomous inference rounds before forcing a pause.
     pub max_rounds: u32,
@@ -117,6 +117,29 @@ pub struct TurnConfig {
     pub default_tool_timeout: Duration,
     /// Interactive or unattended permission policy.
     pub permission_policy: PermissionPolicy,
+    /// Optional reference store reader used to resolve `DisplayBlock::Chart` URIs
+    /// into bounded inline series for chat clients.
+    pub ref_reader: Option<Arc<dyn RefReader>>,
+}
+
+impl std::fmt::Debug for TurnConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TurnConfig")
+            .field("max_rounds", &self.max_rounds)
+            .field("stream_retries", &self.stream_retries)
+            .field("default_tool_timeout", &self.default_tool_timeout)
+            .field("permission_policy", &self.permission_policy)
+            .field("has_ref_reader", &self.ref_reader.is_some())
+            .finish()
+    }
+}
+
+impl TurnConfig {
+    /// Attach a reference reader for resolving `DisplayBlock::Chart` series refs.
+    pub fn with_ref_reader(mut self, ref_reader: Arc<dyn RefReader>) -> Self {
+        self.ref_reader = Some(ref_reader);
+        self
+    }
 }
 
 impl Default for TurnConfig {
@@ -126,6 +149,7 @@ impl Default for TurnConfig {
             stream_retries: 2,
             default_tool_timeout: Duration::from_secs(30),
             permission_policy: PermissionPolicy::Interactive,
+            ref_reader: None,
         }
     }
 }
@@ -814,8 +838,9 @@ pub async fn run_turn(
                                     outcome,
                                     elapsed_ms,
                                     display: Some(ToolDisplay::Text(payload_str.clone())),
-                                    blocks: crate::event::display_blocks_from_payload(
+                                    blocks: crate::event::resolve_display_blocks(
                                         &output.payload,
+                                        config.ref_reader.as_deref(),
                                     ),
                                     raw_output: Some(bounded_output),
                                 })

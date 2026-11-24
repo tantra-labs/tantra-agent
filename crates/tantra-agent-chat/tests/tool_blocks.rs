@@ -2,9 +2,11 @@
 //! (the TUI analysis page, web clients) can render tables, metric grids and charts.
 
 use serde_json::json;
-use tantra_agent_chat::event::display_blocks_from_payload;
+use tantra_agent_chat::event::{display_blocks_from_payload, resolve_display_blocks};
 use tantra_agent_chat::{CallId, SessionEvent, ToolOutcome, TurnId};
-use tantra_agent_core::{CodeDiffHunk, DisplayBlock, MetricItem, TantraResultEnvelope};
+use tantra_agent_core::{
+    CodeDiffHunk, DataReferenceStore, DisplayBlock, MetricItem, TantraResultEnvelope,
+};
 
 #[test]
 fn blocks_are_extracted_from_a_result_envelope_payload() {
@@ -85,4 +87,51 @@ fn tool_finished_serializes_blocks_and_raw_output_only_when_present() {
     let v = serde_json::to_value(&ev).unwrap();
     assert_eq!(v["blocks"][0]["type"], "alert");
     assert_eq!(v["raw_output"]["sharpe"], "1.44");
+}
+
+#[test]
+fn resolve_display_blocks_attaches_chart_series_from_ref_reader() {
+    let store = DataReferenceStore::new();
+    let uri = store.export(
+        "equity_curve",
+        json!([[1_700_000_000, "100000.00"], [1_700_086_400, "102500.50"]]),
+    );
+    let env = TantraResultEnvelope::ok("Backtest ready", json!({ "ok": true })).with_blocks(vec![
+        DisplayBlock::Chart {
+            title: "Equity".into(),
+            chart_type: "line".into(),
+            series_ref: uri,
+            series: Vec::new(),
+        },
+        DisplayBlock::Chart {
+            title: "Missing".into(),
+            chart_type: "sparkline".into(),
+            series_ref: "$tantra/ref/missing".into(),
+            series: Vec::new(),
+        },
+    ]);
+    let payload = serde_json::to_value(env).unwrap();
+
+    let resolved = resolve_display_blocks(&payload, Some(&store));
+    assert_eq!(resolved.len(), 2);
+    assert!(matches!(
+        &resolved[0],
+        DisplayBlock::Chart { series, .. }
+            if series.as_slice()
+                == [
+                    (1_700_000_000, "100000.00".to_string()),
+                    (1_700_086_400, "102500.50".to_string()),
+                ]
+    ));
+    assert!(matches!(
+        &resolved[1],
+        DisplayBlock::Chart { series, .. } if series.is_empty()
+    ));
+
+    // Without a reader, chart series remain empty honestly.
+    let unresolved = resolve_display_blocks(&payload, None);
+    assert!(matches!(
+        &unresolved[0],
+        DisplayBlock::Chart { series, .. } if series.is_empty()
+    ));
 }

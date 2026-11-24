@@ -7,8 +7,8 @@ use chrono::Utc;
 use tokio::sync::mpsc;
 
 use tantra_agent_core::{
-    MemoryStore, Placement, ProfileBudget, PromptSection, SessionScope, SessionStore, StoreError,
-    default_assemble,
+    MemoryStore, Placement, ProfileBudget, PromptSection, RefReader, SessionScope, SessionStore,
+    StoreError, default_assemble,
 };
 use tantra_agent_llm::LlmProvider;
 use tantra_agent_prompt::{
@@ -56,6 +56,7 @@ pub struct ChatAgent {
     registry: ToolRegistry,
     session_store: Arc<dyn SessionStore>,
     memory_store: Option<Arc<dyn MemoryStore>>,
+    ref_reader: Option<Arc<dyn RefReader>>,
     config: ChatConfig,
 }
 
@@ -142,6 +143,7 @@ impl ChatAgent {
             stream_retries: self.config.stream_retries,
             default_tool_timeout: self.config.default_tool_timeout,
             permission_policy: self.config.permission_policy.clone(),
+            ref_reader: self.ref_reader.clone(),
         };
 
         let tool_snapshot = self.registry.snapshot();
@@ -185,6 +187,7 @@ pub struct ChatAgentBuilder {
     registry: ToolRegistry,
     session_store: Arc<dyn SessionStore>,
     memory_store: Option<Arc<dyn MemoryStore>>,
+    ref_reader: Option<Arc<dyn RefReader>>,
     config: ChatConfig,
 }
 
@@ -200,6 +203,7 @@ impl ChatAgentBuilder {
             registry,
             session_store,
             memory_store: None,
+            ref_reader: None,
             config: ChatConfig::default(),
         }
     }
@@ -207,6 +211,13 @@ impl ChatAgentBuilder {
     /// Attach an optional persistent memory store.
     pub fn memory_store(mut self, memory_store: Arc<dyn MemoryStore>) -> Self {
         self.memory_store = Some(memory_store);
+        self
+    }
+
+    /// Attach an optional reference reader for resolving `DisplayBlock::Chart`
+    /// `$tantra/ref/...` URIs into bounded inline series for chat clients.
+    pub fn ref_reader(mut self, ref_reader: Arc<dyn RefReader>) -> Self {
+        self.ref_reader = Some(ref_reader);
         self
     }
 
@@ -223,6 +234,7 @@ impl ChatAgentBuilder {
             registry: self.registry,
             session_store: self.session_store,
             memory_store: self.memory_store,
+            ref_reader: self.ref_reader,
             config: self.config,
         })
     }

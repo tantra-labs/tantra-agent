@@ -8,21 +8,24 @@ COMPLETED).
 
 | Module | Purpose |
 |--------|---------|
-| `agent` | `ChatAgent`, `ChatAgentBuilder`, `ChatConfig` |
+| `agent` | `ChatAgent`, `ChatAgentBuilder` (`.ref_reader(...)`), `ChatConfig` |
 | `cancel` | `CancellationToken` |
 | `error` | `ChatError`, `ChatErrorView` |
-| `event` | `SessionEvent`, `ToolCallView`, `ToolOutcome`, `TurnOutcome`, `TurnId`, `CallId`, `Notice` |
+| `event` | `SessionEvent`, `ToolCallView`, `ToolOutcome`, `TurnOutcome`, `TurnId`, `CallId`, `Notice`, `resolve_display_blocks` |
 | `headless` | `run_turn_headless` (unattended CLI execution) |
 | `permission` | `ToolRisk`, `PermissionPolicy`, `PermissionPrompt`, `PermissionResponder`, `ConfirmOverride`, `PermissionDecision` |
 | `session` | `SessionActor`, `SessionHandle`, `SessionEvents`, `SessionSelector`, `checkpoint` (`Checkpoint`, `ExportFormat`, `SessionCheckpointer`) |
 | `testing` | `FakeChatTool`, `InMemoryMemoryStore`, `InMemorySessionStore` |
 | `tool` | `ChatTool`, `PlanContext`, `ToolContext`, `ToolPlan`, `ToolRegistry`, `ToolSet` |
-| `turn` | `TurnConfig`, `run_turn`, `CancelPoint` |
+| `turn` | `TurnConfig` (`ref_reader: Option<Arc<dyn RefReader>>`), `run_turn`, `CancelPoint` |
 
 ## Turn State Machine
 
 - Max rounds, 64 KiB tool outcome truncation, write-ahead persistence, repeat-error nudge,
   synthetic cancellation repair.
+- When `TurnConfig::ref_reader` is supplied, `run_turn` resolves `DisplayBlock::Chart`
+  `series_ref` URIs on `SessionEvent::ToolFinished` via `resolve_display_blocks` up to
+  `MAX_CHART_SERIES_POINTS`.
 - Channel-based `SessionActor` / `SessionHandle` dispatching typed `SessionEvent` streams.
 - Session checkpoints (`Checkpoint`, `ExportFormat`, `SessionCheckpointer`) for resume/export.
 

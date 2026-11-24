@@ -13,8 +13,8 @@ use tantra_agent_chat::{
     run_turn_headless,
 };
 use tantra_agent_core::{
-    CodeDiffHunk, DisplayBlock, NewSession, PersistedMessage, RuntimeMode, SessionId, SessionScope,
-    SessionStore, StoreErrorKind, TantraResultEnvelope,
+    CodeDiffHunk, DataReferenceStore, DisplayBlock, NewSession, PersistedMessage, RuntimeMode,
+    SessionId, SessionScope, SessionStore, StoreErrorKind, TantraResultEnvelope,
 };
 use tantra_agent_llm::{
     ChatMessage, ChatStreamEvent, LlmToolCall, ScriptedFakeLlm, StopReason, Usage,
@@ -694,4 +694,71 @@ async fn test_in_memory_session_store_get_archive_delete_and_resume_preserves_sc
         store.set_archived(id, true).await.unwrap_err().kind,
         StoreErrorKind::NotFound
     );
+}
+
+#[tokio::test]
+async fn test_chart_series_ref_resolved_in_turn() {
+    let fake_llm = Arc::new(ScriptedFakeLlm::new("test-claude"));
+    fake_llm.push_tool_call_response(
+        "call_chart",
+        "backtest_chart",
+        json!({"symbol": "RELIANCE"}),
+    );
+    fake_llm.push_text_response("Here is your equity curve.");
+
+    let ref_store = Arc::new(DataReferenceStore::new());
+    let uri = ref_store.export(
+        "eq_reliance",
+        json!([[1_700_000_000, "100.00"], [1_700_003_600, "104.25"]]),
+    );
+
+    let store = Arc::new(InMemorySessionStore::new());
+    let mut registry = ToolRegistry::new();
+    let chart_tool = Arc::new(FakeChatTool::new("backtest_chart", ToolRisk::ReadOnly));
+    let env = TantraResultEnvelope::ok("Chart ready", json!({ "ok": true })).with_block(
+        DisplayBlock::Chart {
+            title: "RELIANCE Equity".to_string(),
+            chart_type: "line".to_string(),
+            series_ref: uri.clone(),
+            series: Vec::new(),
+        },
+    );
+    chart_tool.set_result(Ok(serde_json::to_value(env).unwrap()));
+    registry.register(chart_tool);
+
+    let agent = ChatAgent::builder(fake_llm, registry, store)
+        .ref_reader(ref_store)
+        .build()
+        .expect("agent build");
+    let (_outcome, events) = run_turn_headless(
+        &agent,
+        SessionSelector::New(SessionScope::new("chart-test", RuntimeMode::Paper)),
+        "Plot equity",
+    )
+    .await
+    .expect("run turn");
+
+    let chart_blocks: Vec<&DisplayBlock> = events
+        .iter()
+        .filter_map(|ev| match ev {
+            SessionEvent::ToolFinished { blocks, .. } => Some(blocks.iter()),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    assert_eq!(chart_blocks.len(), 1);
+    assert!(matches!(
+        chart_blocks[0],
+        DisplayBlock::Chart {
+            title,
+            series_ref,
+            series,
+            ..
+        } if title == "RELIANCE Equity"
+            && series_ref == &uri
+            && series.as_slice() == [
+                (1_700_000_000, "100.00".to_string()),
+                (1_700_003_600, "104.25".to_string()),
+            ]
+    ));
 }

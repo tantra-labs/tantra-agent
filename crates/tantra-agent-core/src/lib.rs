@@ -52,7 +52,9 @@ pub use prompt::{
     DefaultPromptBuilder, Placement, PromptAssembly, PromptBuilder, PromptHash, PromptSection,
     PromptTemplate, compute_prompt_hash, default_assemble, hash_prompt_hex, sha256_hex,
 };
-pub use ref_store::{DataReferenceStore, RefEntry};
+pub use ref_store::{
+    DataReferenceStore, MAX_CHART_SERIES_POINTS, RefEntry, RefReader, extract_chart_series,
+};
 pub use result::{
     CodeDiffHunk, DisplayBlock, ExecutionMeta, MetricItem, ResultStatus, TantraResultEnvelope,
     ViewKind,

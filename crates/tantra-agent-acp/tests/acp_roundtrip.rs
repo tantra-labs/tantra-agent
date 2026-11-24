@@ -6,7 +6,7 @@ use tantra_agent_acp::{
     AcpClient, AgentHost, ClientEvent, ClientOptions, StaticCatalog, connect_embedded,
 };
 use tantra_agent_chat::{FakeChatTool, InMemorySessionStore, ToolRegistry, ToolRisk, TurnConfig};
-use tantra_agent_core::{DisplayBlock, MetricItem, TantraResultEnvelope};
+use tantra_agent_core::{DataReferenceStore, DisplayBlock, MetricItem, TantraResultEnvelope};
 use tantra_agent_llm::{
     ChatMessage, ChatStreamEvent, LlmToolCall, ScriptedFakeLlm, StopReason, Usage,
 };
@@ -230,4 +230,66 @@ async fn set_model_switches_provider() {
     let evs = run(&client, &mut rx).await;
     assert!(has_text(&evs, "switched"), "{evs:?}");
     assert!(client.set_model("nope").await.is_err());
+}
+
+#[tokio::test]
+async fn chart_series_ref_resolved_over_acp() {
+    let (a, b) = llms();
+    a.push_stream(tool_stream("chart_tool"));
+    a.push_stream(text_stream("plotted"));
+
+    let ref_store = Arc::new(DataReferenceStore::new());
+    let uri = ref_store.export(
+        "acp_eq",
+        json!([[1_700_000_000, "100.00"], [1_700_000_060, "101.75"]]),
+    );
+    let tool = FakeChatTool::new("chart_tool", ToolRisk::ReadOnly);
+    let env = TantraResultEnvelope::ok("chart", json!({})).with_block(DisplayBlock::Chart {
+        title: "Equity".into(),
+        chart_type: "line".into(),
+        series_ref: uri.clone(),
+        series: Vec::new(),
+    });
+    tool.set_result(Ok(serde_json::to_value(env).unwrap()));
+    let mut reg = ToolRegistry::new();
+    reg.register_all(vec![Arc::new(tool)]);
+
+    let acp_host = Arc::new(AgentHost {
+        system_prompt: "test".into(),
+        tools: Arc::new(reg.snapshot()),
+        store: Arc::new(InMemorySessionStore::new()),
+        catalog: Arc::new(
+            StaticCatalog::new()
+                .with_model("fake-a", "Fake A", a)
+                .with_model("fake-b", "Fake B", b),
+        ),
+        turn_config: TurnConfig::default().with_ref_reader(ref_store),
+        max_sessions: 4,
+    });
+
+    let (client, mut rx) = connect_embedded(acp_host, ClientOptions::default())
+        .await
+        .unwrap();
+    let evs = run(&client, &mut rx).await;
+    let blocks = evs
+        .iter()
+        .find_map(|e| match e {
+            ClientEvent::ToolFinished {
+                ok: true, blocks, ..
+            } => Some(blocks),
+            _ => None,
+        })
+        .expect("ToolFinished");
+    assert!(matches!(
+        blocks.as_slice(),
+        [DisplayBlock::Chart {
+            series_ref,
+            series,
+            ..
+        }] if series_ref == &uri
+            && series.as_slice() == [
+                (1_700_000_000, "100.00".to_string()),
+                (1_700_000_060, "101.75".to_string()),
+            ]
+    ));
 }

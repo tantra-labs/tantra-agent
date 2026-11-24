@@ -41,7 +41,7 @@ pub struct TantraResultEnvelope<T> {
 |---------|--------|-----|
 | `Table` | `title`, `columns`, `rows` | Titled table of string rows |
 | `MetricGrid` | `items: Vec<MetricItem>` | Grid of named metric values |
-| `Chart` | `title`, `chart_type`, `series_ref` | Chart ref into `$tantra/ref/...` series |
+| `Chart` | `title`, `chart_type`, `series_ref`, `series` | Chart ref into `$tantra/ref/...` series plus optional bounded `(ts_ms, decimal_str)` `series` resolved by chat hosts via `RefReader` (`MAX_CHART_SERIES_POINTS = 500`, omitted when empty) |
 | `Alert` | `level`, `message` | info / warning / critical alert |
 
 ### Builder Methods
@@ -60,5 +60,5 @@ the wire (see `tantra-agent-core/src/ref_store.rs` zero-floats note).
 ## Related
 
 - `tantra-agent-core/src/ref_store.rs` — `$tantra/ref/<uuid>` ephemeral store for large
-  series referenced (not inlined) via `refs`.
+  series referenced (not inlined) via `refs`, plus `RefReader` / `extract_chart_series`.
 - `tantra-agent-mcp/src/tools.rs` — MCP tool handlers all return `TantraResultEnvelope`.

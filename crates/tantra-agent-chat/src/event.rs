@@ -2,7 +2,10 @@
 
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use tantra_agent_core::{DisplayBlock, MessageSeq, SessionId, SessionScope};
+use tantra_agent_core::{
+    DisplayBlock, MAX_CHART_SERIES_POINTS, MessageSeq, RefReader, SessionId, SessionScope,
+    extract_chart_series,
+};
 use tantra_agent_llm::{StopReason, Usage};
 
 use crate::error::ChatErrorView;
@@ -350,4 +353,30 @@ pub fn display_blocks_from_payload(payload: &serde_json::Value) -> Vec<DisplayBl
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Extract presentation blocks and resolve any `DisplayBlock::Chart` references
+/// against `ref_reader`, attaching a bounded `(timestamp_sec, decimal_string)`
+/// series (`<= MAX_CHART_SERIES_POINTS`) for chat UI clients.
+pub fn resolve_display_blocks(
+    payload: &serde_json::Value,
+    ref_reader: Option<&dyn RefReader>,
+) -> Vec<DisplayBlock> {
+    let mut blocks = display_blocks_from_payload(payload);
+    let Some(reader) = ref_reader else {
+        return blocks;
+    };
+    for block in &mut blocks {
+        if let DisplayBlock::Chart {
+            series_ref, series, ..
+        } = block
+        {
+            if series.is_empty() && !series_ref.is_empty() {
+                if let Some(resolved) = reader.resolve(series_ref) {
+                    *series = extract_chart_series(&resolved, MAX_CHART_SERIES_POINTS);
+                }
+            }
+        }
+    }
+    blocks
 }

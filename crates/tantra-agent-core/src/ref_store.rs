@@ -14,8 +14,19 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
 use chrono::{DateTime, Utc};
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+
+/// Maximum number of `(timestamp_sec, decimal_string)` points attached inline
+/// when resolving a `DisplayBlock::Chart` reference for chat clients.
+pub const MAX_CHART_SERIES_POINTS: usize = 500;
+
+/// Read-only port for resolving `$tantra/ref/...` URIs cached by tools.
+pub trait RefReader: Send + Sync {
+    /// Resolve a reference URI to its stored JSON payload, if present.
+    fn resolve(&self, reference_uri: &str) -> Option<Value>;
+}
 
 /// A single cached reference entry.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -94,6 +105,12 @@ impl DataReferenceStore {
     }
 }
 
+impl RefReader for DataReferenceStore {
+    fn resolve(&self, reference_uri: &str) -> Option<Value> {
+        DataReferenceStore::resolve(self, reference_uri)
+    }
+}
+
 impl FromIterator<(String, Value)> for DataReferenceStore {
     fn from_iter<T: IntoIterator<Item = (String, Value)>>(iter: T) -> Self {
         let store = DataReferenceStore::new();
@@ -102,4 +119,132 @@ impl FromIterator<(String, Value)> for DataReferenceStore {
         }
         store
     }
+}
+
+fn parse_decimal_string(v: &Value) -> Option<String> {
+    match v {
+        Value::String(s) => {
+            let trimmed = s.trim();
+            if Decimal::from_str_exact(trimmed).is_ok() {
+                Some(trimmed.to_string())
+            } else {
+                Decimal::from_scientific(trimmed)
+                    .ok()
+                    .map(|d| d.normalize().to_string())
+            }
+        }
+        Value::Number(n) => {
+            let raw = n.to_string();
+            if Decimal::from_str_exact(&raw).is_ok() {
+                Some(raw)
+            } else {
+                Decimal::from_scientific(&raw)
+                    .ok()
+                    .map(|d| d.normalize().to_string())
+            }
+        }
+        _ => None,
+    }
+}
+
+fn parse_timestamp_sec(v: &Value) -> Option<i64> {
+    match v {
+        Value::Number(n) => n.as_i64(),
+        Value::String(s) => {
+            let trimmed = s.trim();
+            if let Ok(sec) = trimmed.parse::<i64>() {
+                Some(sec)
+            } else {
+                DateTime::parse_from_rfc3339(trimmed)
+                    .ok()
+                    .map(|dt| dt.timestamp())
+            }
+        }
+        _ => None,
+    }
+}
+
+fn unwrap_series_array(value: &Value) -> Option<&Vec<Value>> {
+    if let Some(arr) = value.as_array() {
+        return Some(arr);
+    }
+    let obj = value.as_object()?;
+    for key in [
+        "series",
+        "points",
+        "bars",
+        "candles",
+        "equity_curve",
+        "data",
+    ] {
+        if let Some(inner) = obj.get(key) {
+            if let Some(arr) = inner.as_array() {
+                return Some(arr);
+            }
+            if let Some(arr) = unwrap_series_array(inner) {
+                return Some(arr);
+            }
+        }
+    }
+    None
+}
+
+/// Extract a bounded `(timestamp_sec, decimal_string)` chart series from a
+/// stored JSON reference payload.
+///
+/// Accepts:
+/// - Arrays of `[timestamp, value]` tuples (`timestamp` unix seconds or RFC3339 string)
+/// - Arrays of objects (`timestamp`/`ts`/`time`/`t`/`x` + `close`/`value`/`price`/`equity`/`v`/`y`)
+/// - Arrays of scalar decimal strings or numbers (indexed `0..N`)
+/// - Wrapper objects containing `series`, `points`, `bars`, `candles`, `equity_curve`, or `data`
+///
+/// When more than `max_points` valid points exist, the series is uniformly
+/// downsampled while preserving the chronological order and both endpoints.
+pub fn extract_chart_series(value: &Value, max_points: usize) -> Vec<(i64, String)> {
+    if max_points == 0 {
+        return Vec::new();
+    }
+    let Some(items) = unwrap_series_array(value) else {
+        return Vec::new();
+    };
+
+    let mut parsed = Vec::with_capacity(items.len());
+    for (idx, item) in items.iter().enumerate() {
+        let point = match item {
+            Value::Array(pair) if pair.len() >= 2 => {
+                let ts = parse_timestamp_sec(&pair[0]);
+                let val = parse_decimal_string(&pair[1]);
+                ts.zip(val)
+            }
+            Value::Object(map) => {
+                let ts = ["timestamp", "ts", "time", "t", "x"]
+                    .iter()
+                    .find_map(|k| map.get(*k).and_then(parse_timestamp_sec))
+                    .unwrap_or(idx as i64);
+                let val = ["close", "value", "price", "equity", "v", "y"]
+                    .iter()
+                    .find_map(|k| map.get(*k).and_then(parse_decimal_string));
+                val.map(|v| (ts, v))
+            }
+            scalar => parse_decimal_string(scalar).map(|v| (idx as i64, v)),
+        };
+        if let Some(pt) = point {
+            parsed.push(pt);
+        }
+    }
+
+    if parsed.len() <= max_points {
+        return parsed;
+    }
+    if max_points == 1 {
+        return vec![parsed.pop().expect("non-empty")];
+    }
+
+    let n = parsed.len();
+    let mut bounded = Vec::with_capacity(max_points);
+    for i in 0..max_points {
+        let pick = i * (n - 1) / (max_points - 1);
+        bounded.push(parsed[pick].clone());
+    }
+    bounded
 }
