@@ -93,7 +93,7 @@ fn test_accept_candidate_rejects_stale_decision() {
         Decision::PlaceOrder {
             symbol: "TCS".to_string(),
             side: tantra_core::OrderSide::Buy,
-            qty: tantra_core::Quantity(Default::default()),
+            qty: tantra_core::Quantity::try_new(Default::default()).unwrap(),
             price_limit: None,
             algo_id: "ALGO_01".to_string(),
             rationale: None,

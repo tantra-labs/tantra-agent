@@ -74,10 +74,10 @@ impl MarketReader for MockMarketReader {
         }
         Ok(MarketQuote {
             instrument: instrument.clone(),
-            last_price: Price(dec!(2500.0)),
-            bid: Some(Price(dec!(2499.5))),
-            ask: Some(Price(dec!(2500.5))),
-            volume: Quantity(dec!(100000.0)),
+            last_price: Price::try_new(dec!(2500.0)).unwrap(),
+            bid: Some(Price::try_new(dec!(2499.5)).unwrap()),
+            ask: Some(Price::try_new(dec!(2500.5)).unwrap()),
+            volume: Quantity::try_new(dec!(100000.0)).unwrap(),
             as_of: Utc::now(),
         })
     }
@@ -93,11 +93,11 @@ impl MarketReader for MockMarketReader {
         for i in 0..count {
             bars.push(MarketBar {
                 timestamp: Utc::now() - chrono::Duration::minutes((count - i) as i64),
-                open: Price(dec!(2490.0)),
-                high: Price(dec!(2510.0)),
-                low: Price(dec!(2485.0)),
-                close: Price(dec!(2500.0)),
-                volume: Quantity(dec!(1000.0)),
+                open: Price::try_new(dec!(2490.0)).unwrap(),
+                high: Price::try_new(dec!(2510.0)).unwrap(),
+                low: Price::try_new(dec!(2485.0)).unwrap(),
+                close: Price::try_new(dec!(2500.0)).unwrap(),
+                volume: Quantity::try_new(dec!(1000.0)).unwrap(),
             });
         }
         Ok(MarketHistory {
@@ -135,7 +135,7 @@ impl MarketReader for MockMarketReader {
     ) -> Result<Vec<InstrumentSearchResult>, PortError> {
         if query.to_uppercase().contains("RELIANCE") {
             Ok(vec![InstrumentSearchResult {
-                instrument: InstrumentId::new(Exchange::Nse, "RELIANCE"),
+                instrument: InstrumentId::try_new(Exchange::Nse, "RELIANCE").unwrap(),
                 name: "Reliance Industries Limited".to_string(),
                 exchange: "NSE".to_string(),
                 lot_size: Some(1),
@@ -167,25 +167,26 @@ impl MarketReader for MockMarketReader {
         }
         let inst = instrument
             .cloned()
-            .unwrap_or_else(|| InstrumentId::new(Exchange::Nse, "RELIANCE"));
+            .unwrap_or_else(|| InstrumentId::try_new(Exchange::Nse, "RELIANCE").unwrap());
         Ok(vec![BlockDeal {
             instrument: inst,
             exchange: "NSE".to_string(),
             client_name: "MORGAN STANLEY ASIA SINGAPORE PTE".to_string(),
             side: "buy".to_string(),
             category: "block".to_string(),
-            quantity: Quantity(dec!(500000.0)),
-            price: Price(dec!(2500.0)),
+            quantity: Quantity::try_new(dec!(500000.0)).unwrap(),
+            price: Price::try_new(dec!(2500.0)).unwrap(),
             trade_date: date.unwrap_or_else(Utc::now),
         }])
     }
 
     async fn price_band(&self, _instrument: &InstrumentId) -> Result<PriceBand, PortError> {
-        Ok(PriceBand::new(
-            Price(dec!(2250.0)),
-            Price(dec!(2750.0)),
-            Price(dec!(2500.0)),
-        ))
+        Ok(PriceBand::try_new(
+            Price::try_new(dec!(2250.0)).unwrap(),
+            Price::try_new(dec!(2750.0)).unwrap(),
+            Price::try_new(dec!(2500.0)).unwrap(),
+        )
+        .unwrap())
     }
 
     async fn options_chain(
@@ -201,23 +202,23 @@ impl MarketReader for MockMarketReader {
         }
         let mut contracts = vec![
             OptionContract {
-                instrument: InstrumentId::new(Exchange::Nfo, "NIFTY26NOV24000CE"),
+                instrument: InstrumentId::try_new(Exchange::Nfo, "NIFTY26NOV24000CE").unwrap(),
                 option_type: "CE".to_string(),
-                strike: Price(dec!(24000.0)),
+                strike: Price::try_new(dec!(24000.0)).unwrap(),
                 expiry: Utc::now() + chrono::Duration::days(14),
-                lot_size: Quantity(dec!(75.0)),
-                last_price: Some(Price(dec!(210.5))),
-                bid: Some(Price(dec!(209.0))),
-                ask: Some(Price(dec!(212.0))),
-                open_interest: Some(Quantity(dec!(1250000.0))),
+                lot_size: Quantity::try_new(dec!(75.0)).unwrap(),
+                last_price: Some(Price::try_new(dec!(210.5)).unwrap()),
+                bid: Some(Price::try_new(dec!(209.0)).unwrap()),
+                ask: Some(Price::try_new(dec!(212.0)).unwrap()),
+                open_interest: Some(Quantity::try_new(dec!(1250000.0)).unwrap()),
             },
             OptionContract {
-                instrument: InstrumentId::new(Exchange::Nfo, "NIFTY26NOV24000PE"),
+                instrument: InstrumentId::try_new(Exchange::Nfo, "NIFTY26NOV24000PE").unwrap(),
                 option_type: "PE".to_string(),
-                strike: Price(dec!(24000.0)),
+                strike: Price::try_new(dec!(24000.0)).unwrap(),
                 expiry: Utc::now() + chrono::Duration::days(14),
-                lot_size: Quantity(dec!(75.0)),
-                last_price: Some(Price(dec!(195.0))),
+                lot_size: Quantity::try_new(dec!(75.0)).unwrap(),
+                last_price: Some(Price::try_new(dec!(195.0)).unwrap()),
                 bid: None,
                 ask: None,
                 open_interest: None,
@@ -249,7 +250,7 @@ impl MarketReader for MockMarketReader {
         }
         let inst = instrument
             .cloned()
-            .unwrap_or_else(|| InstrumentId::new(Exchange::Nse, "RELIANCE"));
+            .unwrap_or_else(|| InstrumentId::try_new(Exchange::Nse, "RELIANCE").unwrap());
         let mut actions = vec![
             CorporateAction {
                 instrument: inst.clone(),
@@ -266,8 +267,8 @@ impl MarketReader for MockMarketReader {
                 ex_date: Utc::now() - chrono::Duration::days(90),
                 record_date: None,
                 amount: None,
-                ratio_from: Some(Quantity(dec!(1.0))),
-                ratio_to: Some(Quantity(dec!(2.0))),
+                ratio_from: Some(Quantity::try_new(dec!(1.0)).unwrap()),
+                ratio_to: Some(Quantity::try_new(dec!(2.0)).unwrap()),
             },
         ];
         if let Some(ty) = action_type {
@@ -289,33 +290,34 @@ impl MarketReader for MockMarketReader {
                 "L2 order-book depth source not wired — see tantra-market/docs/gaps/0006-l2-order-book-depth.md",
             ));
         }
-        let bid_total = Quantity(dec!(1200.0));
-        let ask_total = Quantity(dec!(800.0));
+        let bid_total = Quantity::try_new(dec!(1200.0)).unwrap();
+        let ask_total = Quantity::try_new(dec!(800.0)).unwrap();
         Ok(MarketDepth {
             instrument: instrument.clone(),
             as_of: Utc::now(),
             bids: vec![
                 MarketDepthLevel {
-                    price: Price(dec!(2499.0)),
-                    quantity: Quantity(dec!(700.0)),
+                    price: Price::try_new(dec!(2499.0)).unwrap(),
+                    quantity: Quantity::try_new(dec!(700.0)).unwrap(),
                 },
                 MarketDepthLevel {
-                    price: Price(dec!(2498.0)),
-                    quantity: Quantity(dec!(500.0)),
+                    price: Price::try_new(dec!(2498.0)).unwrap(),
+                    quantity: Quantity::try_new(dec!(500.0)).unwrap(),
                 },
             ],
             asks: vec![
                 MarketDepthLevel {
-                    price: Price(dec!(2501.0)),
-                    quantity: Quantity(dec!(500.0)),
+                    price: Price::try_new(dec!(2501.0)).unwrap(),
+                    quantity: Quantity::try_new(dec!(500.0)).unwrap(),
                 },
                 MarketDepthLevel {
-                    price: Price(dec!(2502.0)),
-                    quantity: Quantity(dec!(300.0)),
+                    price: Price::try_new(dec!(2502.0)).unwrap(),
+                    quantity: Quantity::try_new(dec!(300.0)).unwrap(),
                 },
             ],
             // (1200 - 800) / (1200 + 800) * 100 = 20.
-            liquidity_imbalance_pct: (bid_total.0 - ask_total.0) / (bid_total.0 + ask_total.0)
+            liquidity_imbalance_pct: (bid_total.value() - ask_total.value())
+                / (bid_total.value() + ask_total.value())
                 * dec!(100.0),
         })
     }
@@ -353,15 +355,15 @@ impl MarketReader for MockMarketReader {
             DeliveryBar {
                 instrument: instrument.clone(),
                 date: Utc::now() - chrono::Duration::days(2),
-                traded_qty: Quantity(dec!(1000000.0)),
-                delivered_qty: Quantity(dec!(720000.0)),
+                traded_qty: Quantity::try_new(dec!(1000000.0)).unwrap(),
+                delivered_qty: Quantity::try_new(dec!(720000.0)).unwrap(),
                 delivery_pct: dec!(72.0),
             },
             DeliveryBar {
                 instrument: instrument.clone(),
                 date: Utc::now() - chrono::Duration::days(1),
-                traded_qty: Quantity(dec!(1200000.0)),
-                delivered_qty: Quantity(dec!(900000.0)),
+                traded_qty: Quantity::try_new(dec!(1200000.0)).unwrap(),
+                delivered_qty: Quantity::try_new(dec!(900000.0)).unwrap(),
                 delivery_pct: dec!(75.0),
             },
         ];
@@ -384,7 +386,7 @@ impl MarketReader for MockMarketReader {
         Ok(OiBuildupSnapshot {
             instrument: instrument.clone(),
             as_of: Utc::now(),
-            open_interest: Quantity(dec!(1250000.0)),
+            open_interest: Quantity::try_new(dec!(1250000.0)).unwrap(),
             oi_change_pct: Some(dec!(6.5)),
             price_change_pct: Some(dec!(2.1)),
             classification: "long_buildup".to_string(),
@@ -433,12 +435,12 @@ impl MarketReader for MockMarketReader {
         }
         Ok(OiWallsSnapshot {
             top_call_walls: vec![OiWall {
-                strike: Price(dec!(25000.0)),
+                strike: Price::try_new(dec!(25000.0)).unwrap(),
                 oi: dec!(1250000.0),
                 delta_oi_score: dec!(0.82),
             }],
             top_put_walls: vec![OiWall {
-                strike: Price(dec!(24800.0)),
+                strike: Price::try_new(dec!(24800.0)).unwrap(),
                 oi: dec!(980000.0),
                 delta_oi_score: dec!(0.64),
             }],
@@ -496,7 +498,7 @@ impl ContentReader for MockContentReader {
         }
         let inst = instrument
             .cloned()
-            .unwrap_or_else(|| InstrumentId::new(Exchange::Nse, "RELIANCE"));
+            .unwrap_or_else(|| InstrumentId::try_new(Exchange::Nse, "RELIANCE").unwrap());
         let filings = vec![FilingRecord {
             instrument: inst,
             filing_date: Utc::now(),
@@ -707,8 +709,8 @@ impl IpoReader for MockIpoReader {
             company_name: "Zaggle Prepaid Ocean Services".to_string(),
             open_date: Utc::now() + chrono::Duration::days(2),
             close_date: Utc::now() + chrono::Duration::days(4),
-            price_min: Some(Price(dec!(140.0))),
-            price_max: Some(Price(dec!(148.0))),
+            price_min: Some(Price::try_new(dec!(140.0)).unwrap()),
+            price_max: Some(Price::try_new(dec!(148.0)).unwrap()),
             lot_size: Some(100),
             issue_size: Some(Money::inr(dec!(8000000000.0))),
         }];
@@ -845,20 +847,20 @@ impl TaxReportReader for MockTaxReportReader {
         Ok(vec![
             ClosedLotRecord {
                 lot_id: "LOT-ST-1".to_string(),
-                instrument: InstrumentId::new(Exchange::Nse, "RELIANCE"),
-                quantity: Quantity(dec!(100.0)),
-                entry_price: Price(dec!(2000.0)),
-                exit_price: Price(dec!(2500.0)),
+                instrument: InstrumentId::try_new(Exchange::Nse, "RELIANCE").unwrap(),
+                quantity: Quantity::try_new(dec!(100.0)).unwrap(),
+                entry_price: Price::try_new(dec!(2000.0)).unwrap(),
+                exit_price: Price::try_new(dec!(2500.0)).unwrap(),
                 realized_pnl: Money::inr(dec!(50000.0)),
                 holding_period_days: 90,
                 is_long_term: false,
             },
             ClosedLotRecord {
                 lot_id: "LOT-LT-1".to_string(),
-                instrument: InstrumentId::new(Exchange::Nse, "TCS"),
-                quantity: Quantity(dec!(10.0)),
-                entry_price: Price(dec!(3000.0)),
-                exit_price: Price(dec!(3400.0)),
+                instrument: InstrumentId::try_new(Exchange::Nse, "TCS").unwrap(),
+                quantity: Quantity::try_new(dec!(10.0)).unwrap(),
+                entry_price: Price::try_new(dec!(3000.0)).unwrap(),
+                exit_price: Price::try_new(dec!(3400.0)).unwrap(),
                 realized_pnl: Money::inr(dec!(4000.0)),
                 holding_period_days: 500,
                 is_long_term: true,
@@ -887,20 +889,20 @@ impl PortfolioReader for MockPortfolioReader {
         }
         Ok(vec![PositionRecord {
             account_id: account.clone(),
-            instrument: InstrumentId::new(Exchange::Nse, "RELIANCE"),
+            instrument: InstrumentId::try_new(Exchange::Nse, "RELIANCE").unwrap(),
             side: PositionSide::Long,
-            quantity: Quantity(dec!(100.0)),
-            avg_price: Price(dec!(2400.0)),
+            quantity: Quantity::try_new(dec!(100.0)).unwrap(),
+            avg_price: Price::try_new(dec!(2400.0)).unwrap(),
             realized_pnl: Money::inr(dec!(5000.0)),
             unrealized_pnl: Money::inr(dec!(10000.0)),
             lots: vec![TaxLot {
                 lot_id: "LOT-01".to_string(),
                 account_id: account.clone(),
-                instrument: InstrumentId::new(Exchange::Nse, "RELIANCE"),
+                instrument: InstrumentId::try_new(Exchange::Nse, "RELIANCE").unwrap(),
                 side: PositionSide::Long,
-                entry_price: Price(dec!(2400.0)),
-                quantity: Quantity(dec!(100.0)),
-                remaining_quantity: Quantity(dec!(100.0)),
+                entry_price: Price::try_new(dec!(2400.0)).unwrap(),
+                quantity: Quantity::try_new(dec!(100.0)).unwrap(),
+                remaining_quantity: Quantity::try_new(dec!(100.0)).unwrap(),
                 entry_date: chrono::NaiveDate::from_ymd_opt(2026, 1, 15).unwrap(),
                 created_at: Utc::now(),
             }],
@@ -916,11 +918,11 @@ impl PortfolioReader for MockPortfolioReader {
         Ok(vec![TaxLot {
             lot_id: "LOT-01".to_string(),
             account_id: account.clone(),
-            instrument: InstrumentId::new(Exchange::Nse, "RELIANCE"),
+            instrument: InstrumentId::try_new(Exchange::Nse, "RELIANCE").unwrap(),
             side: PositionSide::Long,
-            entry_price: Price(dec!(2400.0)),
-            quantity: Quantity(dec!(100.0)),
-            remaining_quantity: Quantity(dec!(100.0)),
+            entry_price: Price::try_new(dec!(2400.0)).unwrap(),
+            quantity: Quantity::try_new(dec!(100.0)).unwrap(),
+            remaining_quantity: Quantity::try_new(dec!(100.0)).unwrap(),
             entry_date: chrono::NaiveDate::from_ymd_opt(2026, 1, 15).unwrap(),
             created_at: Utc::now(),
         }])
@@ -940,14 +942,14 @@ impl PortfolioReader for MockPortfolioReader {
             broker_order_id: Some("BROKER-101".to_string()),
             algo_id: Some(AlgoId::new("ALPHA-1")),
             account_id: account.clone(),
-            instrument: InstrumentId::new(Exchange::Nse, "RELIANCE"),
+            instrument: InstrumentId::try_new(Exchange::Nse, "RELIANCE").unwrap(),
             side: OrderSide::Buy,
-            order_type: OrderType::Limit(Price(dec!(2400.0))),
+            order_type: OrderType::Limit(Price::try_new(dec!(2400.0)).unwrap()),
             time_in_force: TimeInForce::Day,
-            price: Some(Price(dec!(2400.0))),
-            quantity: Quantity(dec!(100.0)),
-            filled_quantity: Quantity(dec!(100.0)),
-            avg_fill_price: Some(Price(dec!(2400.0))),
+            price: Some(Price::try_new(dec!(2400.0)).unwrap()),
+            quantity: Quantity::try_new(dec!(100.0)).unwrap(),
+            filled_quantity: Quantity::try_new(dec!(100.0)).unwrap(),
+            avg_fill_price: Some(Price::try_new(dec!(2400.0)).unwrap()),
             status: OrderStatus::Filled,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -2955,11 +2957,11 @@ async fn test_propose_trade_tool() {
     // 1. Pure intent → Decision formulation (closed grammar).
     let intent = TradeIntent {
         algo_id: "momentum-alpha-v1".to_string(),
-        instrument: InstrumentId::new(Exchange::Nse, "RELIANCE"),
+        instrument: InstrumentId::try_new(Exchange::Nse, "RELIANCE").unwrap(),
         side: "buy".to_string(),
         order_type: "limit".to_string(),
-        quantity: Quantity(dec!(100.0)),
-        price: Some(Price(dec!(2500.0))),
+        quantity: Quantity::try_new(dec!(100.0)).unwrap(),
+        price: Some(Price::try_new(dec!(2500.0)).unwrap()),
         paper_trading: false,
         rationale: Some("test".to_string()),
     };
@@ -2973,12 +2975,12 @@ async fn test_propose_trade_tool() {
             price_limit: Some(_),
             algo_id,
             ..
-        } if symbol == "RELIANCE" && qty.0 == dec!(100.0) && algo_id == "momentum-alpha-v1"
+        } if symbol == "RELIANCE" && qty.value() == dec!(100.0) && algo_id == "momentum-alpha-v1"
     ));
 
     // 2. Validation rejects bad intents.
     let bad_qty = TradeIntent {
-        quantity: Quantity(dec!(0.0)),
+        quantity: Quantity::try_new(dec!(0.0)).unwrap(),
         ..intent.clone()
     };
     assert!(trade_intent_to_decision(&bad_qty).is_err());

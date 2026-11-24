@@ -20,7 +20,7 @@ fn sample_decision_buy(symbol: &str, qty: u64, price: u64) -> Decision {
         symbol: symbol.to_string(),
         side: OrderSide::Buy,
         qty: Quantity::from_u64(qty),
-        price_limit: Some(Price(Decimal::from(price))),
+        price_limit: Some(Price::try_new(Decimal::from(price)).unwrap()),
         algo_id: "ALGO_MOMENTUM_V1".to_string(),
         rationale: Some("Bullish breakout".to_string()),
     }
@@ -31,7 +31,7 @@ fn sample_decision_sell(symbol: &str, qty: u64, price: u64) -> Decision {
         symbol: symbol.to_string(),
         side: OrderSide::Sell,
         qty: Quantity::from_u64(qty),
-        price_limit: Some(Price(Decimal::from(price))),
+        price_limit: Some(Price::try_new(Decimal::from(price)).unwrap()),
         algo_id: "ALGO_MOMENTUM_V1".to_string(),
         rationale: Some("Take profit target".to_string()),
     }
@@ -316,14 +316,14 @@ fn test_replayer_sequential_order_generation() {
 
     let orders1 = replayer.next_orders();
     assert_eq!(orders1.len(), 1);
-    assert_eq!(orders1[0].instrument.symbol, "RELIANCE");
-    assert_eq!(orders1[0].quantity.0, dec!(25));
+    assert_eq!(orders1[0].instrument.symbol(), "RELIANCE");
+    assert_eq!(orders1[0].quantity.value(), dec!(25));
     assert_eq!(orders1[0].side, OrderSide::Buy);
 
     let orders2 = replayer.next_orders();
     assert_eq!(orders2.len(), 1);
-    assert_eq!(orders2[0].instrument.symbol, "TCS");
-    assert_eq!(orders2[0].quantity.0, dec!(10));
+    assert_eq!(orders2[0].instrument.symbol(), "TCS");
+    assert_eq!(orders2[0].quantity.value(), dec!(10));
     assert_eq!(orders2[0].side, OrderSide::Sell);
 
     assert!(replayer.next_orders().is_empty());
@@ -332,7 +332,7 @@ fn test_replayer_sequential_order_generation() {
     replayer.reset();
     let re_orders1 = replayer.next_orders();
     assert_eq!(re_orders1.len(), 1);
-    assert_eq!(re_orders1[0].instrument.symbol, "RELIANCE");
+    assert_eq!(re_orders1[0].instrument.symbol(), "RELIANCE");
 }
 
 // ---------------------------------------------------------------------------
@@ -363,7 +363,7 @@ proptest! {
                 symbol: symbols[i].clone(),
                 side,
                 qty: Quantity::from_u64(quantities[i]),
-                price_limit: Some(Price(Decimal::from(prices[i]))),
+                price_limit: Some(Price::try_new(Decimal::from(prices[i])).unwrap()),
                 algo_id: "ALGO_PROPTEST".to_string(),
                 rationale: Some(format!("Step {i}")),
             };

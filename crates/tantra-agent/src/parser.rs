@@ -110,7 +110,7 @@ impl DecisionParser {
 
                 // Quantity must be positive
                 if !qty.is_positive() {
-                    return Err(DecisionError::NonPositiveQuantity(qty.0));
+                    return Err(DecisionError::NonPositiveQuantity(qty.value()));
                 }
 
                 // Algo ID must be non-empty
@@ -128,8 +128,8 @@ impl DecisionParser {
                     if let Some(ref_price) = reference_price
                         && ref_price.is_positive()
                     {
-                        let diff = (limit.0 - ref_price.0).abs();
-                        let deviation_pct = (diff / ref_price.0) * dec!(100.00);
+                        let diff = (limit.value() - ref_price.value()).abs();
+                        let deviation_pct = (diff / ref_price.value()) * dec!(100.00);
                         if deviation_pct > self.max_price_deviation_pct {
                             return Err(DecisionError::UngroundedPrice {
                                 limit: *limit,

@@ -43,7 +43,7 @@ fn test_trader_loop_evaluates_decision_against_risk_engine() {
 
     let trader = TraderLoop::new(config);
     let limits = RiskLimits {
-        max_quantity_per_order: Some(Quantity(dec!(50))),
+        max_quantity_per_order: Some(Quantity::try_new(dec!(50)).unwrap()),
         ..RiskLimits::default()
     };
 
@@ -53,8 +53,8 @@ fn test_trader_loop_evaluates_decision_against_risk_engine() {
     let valid_decision = Decision::PlaceOrder {
         symbol: "TCS".to_string(),
         side: OrderSide::Buy,
-        qty: Quantity(dec!(20)),
-        price_limit: Some(Price(dec!(3500))),
+        qty: Quantity::try_new(dec!(20)).unwrap(),
+        price_limit: Some(Price::try_new(dec!(3500)).unwrap()),
         algo_id: "ALGO_01".to_string(),
         rationale: None,
     };
@@ -69,8 +69,8 @@ fn test_trader_loop_evaluates_decision_against_risk_engine() {
     let oversized_decision = Decision::PlaceOrder {
         symbol: "TCS".to_string(),
         side: OrderSide::Buy,
-        qty: Quantity(dec!(100)),
-        price_limit: Some(Price(dec!(3500))),
+        qty: Quantity::try_new(dec!(100)).unwrap(),
+        price_limit: Some(Price::try_new(dec!(3500)).unwrap()),
         algo_id: "ALGO_01".to_string(),
         rationale: None,
     };

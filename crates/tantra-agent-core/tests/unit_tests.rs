@@ -40,8 +40,8 @@ fn test_closed_decision_parser_success_and_markdown() {
         } => {
             assert_eq!(symbol, "RELIANCE");
             assert_eq!(*side, OrderSide::Buy);
-            assert_eq!(qty.0, dec!(50));
-            assert_eq!(price_limit.unwrap().0, dec!(2450.50));
+            assert_eq!(qty.value(), dec!(50));
+            assert_eq!(price_limit.unwrap().value(), dec!(2450.50));
             assert_eq!(algo_id, "SEBI_ALGO_007");
         }
         _ => panic!("Expected PlaceOrder decision"),
@@ -123,7 +123,7 @@ fn test_sebi_algo_id_validation() {
     let invalid_algo_decision = Decision::PlaceOrder {
         symbol: "RELIANCE".into(),
         side: OrderSide::Buy,
-        qty: Quantity(dec!(10)),
+        qty: Quantity::try_new(dec!(10)).unwrap(),
         price_limit: None,
         algo_id: "algo_lowercase".into(),
         rationale: None,
@@ -140,18 +140,19 @@ fn test_sebi_algo_id_validation() {
 fn test_price_band_grounding_validation() {
     let parser = DecisionParser::new().with_universe(vec!["RELIANCE"]);
 
-    let band = PriceBand::new(
-        Price(dec!(2400.00)),
-        Price(dec!(2600.00)),
-        Price(dec!(2500.00)),
-    );
+    let band = PriceBand::try_new(
+        Price::try_new(dec!(2400.00)).unwrap(),
+        Price::try_new(dec!(2600.00)).unwrap(),
+        Price::try_new(dec!(2500.00)).unwrap(),
+    )
+    .unwrap();
 
     // Limit order within price band passes
     let in_band = Decision::PlaceOrder {
         symbol: "RELIANCE".into(),
         side: OrderSide::Buy,
-        qty: Quantity(dec!(10)),
-        price_limit: Some(Price(dec!(2450.00))),
+        qty: Quantity::try_new(dec!(10)).unwrap(),
+        price_limit: Some(Price::try_new(dec!(2450.00)).unwrap()),
         algo_id: "ALGO_01".into(),
         rationale: None,
     };
@@ -165,8 +166,8 @@ fn test_price_band_grounding_validation() {
     let above_band = Decision::PlaceOrder {
         symbol: "RELIANCE".into(),
         side: OrderSide::Buy,
-        qty: Quantity(dec!(10)),
-        price_limit: Some(Price(dec!(2650.00))),
+        qty: Quantity::try_new(dec!(10)).unwrap(),
+        price_limit: Some(Price::try_new(dec!(2650.00)).unwrap()),
         algo_id: "ALGO_01".into(),
         rationale: None,
     };
@@ -182,8 +183,8 @@ fn test_price_band_grounding_validation() {
     let below_band = Decision::PlaceOrder {
         symbol: "RELIANCE".into(),
         side: OrderSide::Buy,
-        qty: Quantity(dec!(10)),
-        price_limit: Some(Price(dec!(2350.00))),
+        qty: Quantity::try_new(dec!(10)).unwrap(),
+        price_limit: Some(Price::try_new(dec!(2350.00)).unwrap()),
         algo_id: "ALGO_01".into(),
         rationale: None,
     };
@@ -199,14 +200,14 @@ fn test_price_band_grounding_validation() {
 #[test]
 fn test_reference_price_collar_grounding() {
     let parser = DecisionParser::new().with_max_price_deviation(dec!(10.00)); // 10% max collar
-    let ref_price = Price(dec!(2000.00));
+    let ref_price = Price::try_new(dec!(2000.00)).unwrap();
 
     // Ungrounded order with 25% price deviation
     let ungrounded = Decision::PlaceOrder {
         symbol: "TCS".into(),
         side: OrderSide::Buy,
-        qty: Quantity(dec!(5)),
-        price_limit: Some(Price(dec!(2500.00))),
+        qty: Quantity::try_new(dec!(5)).unwrap(),
+        price_limit: Some(Price::try_new(dec!(2500.00)).unwrap()),
         algo_id: "ALGO_01".into(),
         rationale: None,
     };
@@ -220,8 +221,8 @@ fn test_reference_price_collar_grounding() {
             deviation_pct,
             max_pct,
         } => {
-            assert_eq!(limit.0, dec!(2500.00));
-            assert_eq!(reference.0, dec!(2000.00));
+            assert_eq!(limit.value(), dec!(2500.00));
+            assert_eq!(reference.value(), dec!(2000.00));
             assert_eq!(deviation_pct, dec!(25.00));
             assert_eq!(max_pct, dec!(10.00));
         }
@@ -232,8 +233,8 @@ fn test_reference_price_collar_grounding() {
     let grounded = Decision::PlaceOrder {
         symbol: "TCS".into(),
         side: OrderSide::Buy,
-        qty: Quantity(dec!(5)),
-        price_limit: Some(Price(dec!(2100.00))),
+        qty: Quantity::try_new(dec!(5)).unwrap(),
+        price_limit: Some(Price::try_new(dec!(2100.00)).unwrap()),
         algo_id: "ALGO_01".into(),
         rationale: None,
     };
@@ -248,7 +249,7 @@ fn test_reference_price_collar_grounding() {
 fn test_risk_engine_pre_trade_integration() {
     let parser = DecisionParser::new();
     let limits = RiskLimits {
-        max_quantity_per_order: Some(Quantity(dec!(100))),
+        max_quantity_per_order: Some(Quantity::try_new(dec!(100)).unwrap()),
         ..RiskLimits::default()
     };
 
@@ -259,8 +260,8 @@ fn test_risk_engine_pre_trade_integration() {
     let valid_decision = Decision::PlaceOrder {
         symbol: "INFY".into(),
         side: OrderSide::Buy,
-        qty: Quantity(dec!(50)),
-        price_limit: Some(Price(dec!(1500.00))),
+        qty: Quantity::try_new(dec!(50)).unwrap(),
+        price_limit: Some(Price::try_new(dec!(1500.00)).unwrap()),
         algo_id: "ALGO_01".into(),
         rationale: None,
     };
@@ -274,8 +275,8 @@ fn test_risk_engine_pre_trade_integration() {
     let oversized_decision = Decision::PlaceOrder {
         symbol: "INFY".into(),
         side: OrderSide::Buy,
-        qty: Quantity(dec!(500)),
-        price_limit: Some(Price(dec!(1500.00))),
+        qty: Quantity::try_new(dec!(500)).unwrap(),
+        price_limit: Some(Price::try_new(dec!(1500.00)).unwrap()),
         algo_id: "ALGO_01".into(),
         rationale: None,
     };

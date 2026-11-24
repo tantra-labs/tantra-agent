@@ -156,7 +156,9 @@ impl PromptReplayer {
                 ..
             } => {
                 if *side == OrderSide::Buy {
-                    let inst = InstrumentId::new(Exchange::Nse, symbol.clone());
+                    let Ok(inst) = InstrumentId::try_new(Exchange::Nse, symbol) else {
+                        return Vec::new();
+                    };
                     let aid = if algo_id.trim().is_empty() {
                         fallback_algo_id.to_string()
                     } else {
@@ -171,7 +173,9 @@ impl PromptReplayer {
                     order.tag = Some("replay_buy".into());
                     vec![order]
                 } else {
-                    let inst = InstrumentId::new(Exchange::Nse, symbol.clone());
+                    let Ok(inst) = InstrumentId::try_new(Exchange::Nse, symbol) else {
+                        return Vec::new();
+                    };
                     let aid = if algo_id.trim().is_empty() {
                         fallback_algo_id.to_string()
                     } else {

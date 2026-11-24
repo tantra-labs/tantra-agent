@@ -44,9 +44,15 @@ pub fn parse_instrument(s: &str) -> Result<InstrumentId, ToolError> {
             tool: "market".to_string(),
             message: format!("unknown exchange `{exch_str}`: {e}"),
         })?;
-        Ok(InstrumentId::new(exchange, sym))
+        InstrumentId::try_new(exchange, sym).map_err(|e| ToolError::InvalidArguments {
+            tool: "market".to_string(),
+            message: e.to_string(),
+        })
     } else {
-        Ok(InstrumentId::new(Exchange::Nse, trimmed))
+        InstrumentId::try_new(Exchange::Nse, trimmed).map_err(|e| ToolError::InvalidArguments {
+            tool: "market".to_string(),
+            message: e.to_string(),
+        })
     }
 }
 
@@ -139,10 +145,10 @@ impl ChatTool for MarketQuoteTool {
             "market_quote",
             serde_json::json!({
                 "instrument": quote.instrument.to_string(),
-                "last_price": quote.last_price.0,
-                "bid": quote.bid.map(|p| p.0),
-                "ask": quote.ask.map(|p| p.0),
-                "volume": quote.volume.0,
+                "last_price": quote.last_price.value(),
+                "bid": quote.bid.map(|p| p.value()),
+                "ask": quote.ask.map(|p| p.value()),
+                "volume": quote.volume.value(),
                 "as_of": quote.as_of,
             }),
         ))
@@ -238,11 +244,11 @@ impl ChatTool for MarketHistoryTool {
             .map(|b| {
                 serde_json::json!({
                     "timestamp": b.timestamp,
-                    "open": b.open.0,
-                    "high": b.high.0,
-                    "low": b.low.0,
-                    "close": b.close.0,
-                    "volume": b.volume.0
+                    "open": b.open.value(),
+                    "high": b.high.value(),
+                    "low": b.low.value(),
+                    "close": b.close.value(),
+                    "volume": b.volume.value()
                 })
             })
             .collect();
@@ -589,8 +595,8 @@ impl ChatTool for BlockDealsTool {
                     "client_name": d.client_name,
                     "side": d.side,
                     "category": d.category,
-                    "quantity": d.quantity.0,
-                    "price": d.price.0,
+                    "quantity": d.quantity.value(),
+                    "price": d.price.value(),
                     "trade_date": d.trade_date,
                 })
             })
@@ -692,13 +698,13 @@ impl ChatTool for OptionsChainTool {
                 serde_json::json!({
                     "instrument": c.instrument.to_string(),
                     "option_type": c.option_type,
-                    "strike": c.strike.0,
+                    "strike": c.strike.value(),
                     "expiry": c.expiry,
-                    "lot_size": c.lot_size.0,
-                    "last_price": c.last_price.map(|p| p.0),
-                    "bid": c.bid.map(|p| p.0),
-                    "ask": c.ask.map(|p| p.0),
-                    "open_interest": c.open_interest.map(|q| q.0),
+                    "lot_size": c.lot_size.value(),
+                    "last_price": c.last_price.map(|p| p.value()),
+                    "bid": c.bid.map(|p| p.value()),
+                    "ask": c.ask.map(|p| p.value()),
+                    "open_interest": c.open_interest.map(|q| q.value()),
                 })
             })
             .collect();
@@ -805,8 +811,8 @@ impl ChatTool for CorporateActionsTool {
                     "ex_date": a.ex_date,
                     "record_date": a.record_date,
                     "amount": a.amount.map(|m| m.amount),
-                    "ratio_from": a.ratio_from.map(|q| q.0),
-                    "ratio_to": a.ratio_to.map(|q| q.0),
+                    "ratio_from": a.ratio_from.map(|q| q.value()),
+                    "ratio_to": a.ratio_to.map(|q| q.value()),
                 })
             })
             .collect();
@@ -902,19 +908,19 @@ impl ChatTool for MarketDepthTool {
         let bid_total: Decimal = depth
             .bids
             .iter()
-            .fold(Decimal::ZERO, |acc, l| acc + l.quantity.0);
+            .fold(Decimal::ZERO, |acc, l| acc + l.quantity.value());
         let ask_total: Decimal = depth
             .asks
             .iter()
-            .fold(Decimal::ZERO, |acc, l| acc + l.quantity.0);
+            .fold(Decimal::ZERO, |acc, l| acc + l.quantity.value());
 
         let bids_json: Vec<Value> = depth
             .bids
             .into_iter()
             .map(|l| {
                 serde_json::json!({
-                    "price": l.price.0,
-                    "quantity": l.quantity.0,
+                    "price": l.price.value(),
+                    "quantity": l.quantity.value(),
                 })
             })
             .collect();
@@ -923,8 +929,8 @@ impl ChatTool for MarketDepthTool {
             .into_iter()
             .map(|l| {
                 serde_json::json!({
-                    "price": l.price.0,
-                    "quantity": l.quantity.0,
+                    "price": l.price.value(),
+                    "quantity": l.quantity.value(),
                 })
             })
             .collect();
@@ -1119,8 +1125,8 @@ impl ChatTool for DeliveryAnalysisTool {
                 serde_json::json!({
                     "instrument": b.instrument.to_string(),
                     "date": b.date,
-                    "traded_qty": b.traded_qty.0,
-                    "delivered_qty": b.delivered_qty.0,
+                    "traded_qty": b.traded_qty.value(),
+                    "delivered_qty": b.delivered_qty.value(),
                     "delivery_pct": b.delivery_pct,
                 })
             })
@@ -1211,7 +1217,7 @@ impl ChatTool for OiBuildupTool {
             serde_json::json!({
                 "instrument": snapshot.instrument.to_string(),
                 "as_of": snapshot.as_of,
-                "open_interest": snapshot.open_interest.0,
+                "open_interest": snapshot.open_interest.value(),
                 "oi_change_pct": snapshot.oi_change_pct,
                 "price_change_pct": snapshot.price_change_pct,
                 "classification": snapshot.classification,

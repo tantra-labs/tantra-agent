@@ -23,7 +23,7 @@ use crate::ports::trade_intent::{TradeIntent, TradeIntentSink};
 /// service consume. Market orders carry no `price_limit`; limit orders require
 /// a positive price. Non-positive quantities are rejected.
 pub fn trade_intent_to_decision(intent: &TradeIntent) -> Result<Decision, String> {
-    if intent.quantity.0 <= Decimal::ZERO {
+    if intent.quantity.value() <= Decimal::ZERO {
         return Err("quantity must be positive".to_string());
     }
     if intent.algo_id.trim().is_empty() {
@@ -40,7 +40,7 @@ pub fn trade_intent_to_decision(intent: &TradeIntent) -> Result<Decision, String
             let price = intent
                 .price
                 .ok_or_else(|| "limit orders require a price".to_string())?;
-            if price.0 <= Decimal::ZERO {
+            if price.value() <= Decimal::ZERO {
                 return Err("limit price must be positive".to_string());
             }
             Some(price)
@@ -52,7 +52,7 @@ pub fn trade_intent_to_decision(intent: &TradeIntent) -> Result<Decision, String
         }
     };
     Ok(Decision::PlaceOrder {
-        symbol: intent.instrument.symbol.clone(),
+        symbol: intent.instrument.symbol().to_string(),
         side,
         qty: intent.quantity,
         price_limit,
@@ -150,7 +150,7 @@ impl ChatTool for ProposeTradeTool {
             tool: "propose_trade".to_string(),
             message: e.to_string(),
         })?;
-        if quantity.0 <= Decimal::ZERO {
+        if quantity.value() <= Decimal::ZERO {
             return Err(ToolError::InvalidArguments {
                 tool: "propose_trade".to_string(),
                 message: "quantity must be positive".to_string(),
@@ -165,7 +165,12 @@ impl ChatTool for ProposeTradeTool {
                 tool: "propose_trade".to_string(),
                 message: e.to_string(),
             })?
-            .map(Price::new);
+            .map(Price::try_new)
+            .transpose()
+            .map_err(|e| ToolError::InvalidArguments {
+                tool: "propose_trade".to_string(),
+                message: e.to_string(),
+            })?;
         // SEBI algo-id format validation (mirrors `Decision::ALGO_ID_FORMAT`).
         let valid_algo = (4..=32).contains(&args.algo_id.len())
             && args

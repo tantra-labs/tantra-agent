@@ -219,7 +219,9 @@ impl PromptReplayer {
                     algo_id.clone()
                 };
 
-                let inst = InstrumentId::new(Exchange::Nse, symbol.clone());
+                let Ok(inst) = InstrumentId::try_new(Exchange::Nse, symbol) else {
+                    return Vec::new();
+                };
                 let order_type = match price_limit {
                     Some(limit) => OrderType::Limit(*limit),
                     None => OrderType::Market,

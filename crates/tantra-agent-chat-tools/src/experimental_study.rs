@@ -280,7 +280,7 @@ impl ChatTool for HistoricalOutlierNewsTool {
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .map(str::to_string)
-            .unwrap_or_else(|| default_keywords_for_asset_class(&asset_class, &inst.symbol));
+            .unwrap_or_else(|| default_keywords_for_asset_class(&asset_class, inst.symbol()));
 
         let cache_key: CacheKey = (
             inst.to_string(),
@@ -329,7 +329,7 @@ impl ChatTool for HistoricalOutlierNewsTool {
         let mut cal_err: Option<PortError> = None;
         let mut items: Vec<Value> = Vec::new();
         let inst_upper = inst.to_string().to_ascii_uppercase();
-        let sym_upper = inst.symbol.to_ascii_uppercase();
+        let sym_upper = inst.symbol().to_ascii_uppercase();
 
         match news_res {
             Ok(articles) => {

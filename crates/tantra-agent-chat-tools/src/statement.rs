@@ -39,9 +39,9 @@ pub fn format_ledger_statement(lots: &[ClosedLotRecord]) -> String {
             "| {} | {} | {} | {} | {} | {} | {} | {} |\n",
             lot.lot_id,
             lot.instrument,
-            lot.quantity.0,
-            lot.entry_price.0,
-            lot.exit_price.0,
+            lot.quantity.value(),
+            lot.entry_price.value(),
+            lot.exit_price.value(),
             lot.realized_pnl.amount,
             lot.holding_period_days,
             if lot.is_long_term { "LT" } else { "ST" }

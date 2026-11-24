@@ -41,8 +41,8 @@ fn test_closed_decision_parser_success_and_markdown() {
         } => {
             assert_eq!(symbol, "RELIANCE");
             assert_eq!(*side, OrderSide::Buy);
-            assert_eq!(qty.0, dec!(50));
-            assert_eq!(price_limit.unwrap().0, dec!(2450.50));
+            assert_eq!(qty.value(), dec!(50));
+            assert_eq!(price_limit.unwrap().value(), dec!(2450.50));
             assert_eq!(algo_id, "SEBI_ALGO_007");
         }
         _ => panic!("Expected PlaceOrder decision"),
@@ -94,7 +94,7 @@ fn test_strict_validation_rules() {
     let unknown_sym = Decision::PlaceOrder {
         symbol: "UNKNOWN_PUMP".into(),
         side: OrderSide::Buy,
-        qty: Quantity(dec!(10)),
+        qty: Quantity::try_new(dec!(10)).unwrap(),
         price_limit: None,
         algo_id: "ALGO_01".into(),
         rationale: None,
@@ -108,7 +108,7 @@ fn test_strict_validation_rules() {
     let zero_qty = Decision::PlaceOrder {
         symbol: "RELIANCE".into(),
         side: OrderSide::Buy,
-        qty: Quantity(Decimal::ZERO),
+        qty: Quantity::try_new(Decimal::ZERO).unwrap(),
         price_limit: None,
         algo_id: "ALGO_01".into(),
         rationale: None,
@@ -122,7 +122,7 @@ fn test_strict_validation_rules() {
     let empty_algo = Decision::PlaceOrder {
         symbol: "RELIANCE".into(),
         side: OrderSide::Buy,
-        qty: Quantity(dec!(10)),
+        qty: Quantity::try_new(dec!(10)).unwrap(),
         price_limit: None,
         algo_id: "  ".into(),
         rationale: None,
@@ -133,12 +133,12 @@ fn test_strict_validation_rules() {
     ));
 
     // 4. Ungrounded limit price (deviates > 10%)
-    let ref_price = Price(dec!(2000.00));
+    let ref_price = Price::try_new(dec!(2000.00)).unwrap();
     let ungrounded_buy = Decision::PlaceOrder {
         symbol: "RELIANCE".into(),
         side: OrderSide::Buy,
-        qty: Quantity(dec!(10)),
-        price_limit: Some(Price(dec!(2500.00))), // 25% above reference
+        qty: Quantity::try_new(dec!(10)).unwrap(),
+        price_limit: Some(Price::try_new(dec!(2500.00)).unwrap()), // 25% above reference
         algo_id: "ALGO_01".into(),
         rationale: None,
     };
@@ -152,8 +152,8 @@ fn test_strict_validation_rules() {
             deviation_pct,
             max_pct,
         } => {
-            assert_eq!(limit.0, dec!(2500.00));
-            assert_eq!(reference.0, dec!(2000.00));
+            assert_eq!(limit.value(), dec!(2500.00));
+            assert_eq!(reference.value(), dec!(2000.00));
             assert_eq!(deviation_pct, dec!(25.00));
             assert_eq!(max_pct, dec!(10.00));
         }
@@ -164,8 +164,8 @@ fn test_strict_validation_rules() {
     let grounded_buy = Decision::PlaceOrder {
         symbol: "RELIANCE".into(),
         side: OrderSide::Buy,
-        qty: Quantity(dec!(10)),
-        price_limit: Some(Price(dec!(2050.00))), // 2.5% deviation
+        qty: Quantity::try_new(dec!(10)).unwrap(),
+        price_limit: Some(Price::try_new(dec!(2050.00)).unwrap()), // 2.5% deviation
         algo_id: "ALGO_01".into(),
         rationale: None,
     };
@@ -180,7 +180,7 @@ fn test_strict_validation_rules() {
 fn test_pre_trade_risk_engine_integration() {
     let parser = DecisionParser::new();
     let limits = RiskLimits {
-        max_quantity_per_order: Some(Quantity(dec!(100))),
+        max_quantity_per_order: Some(Quantity::try_new(dec!(100)).unwrap()),
         ..RiskLimits::default()
     };
 
@@ -192,8 +192,8 @@ fn test_pre_trade_risk_engine_integration() {
     let valid_decision = Decision::PlaceOrder {
         symbol: "TCS".into(),
         side: OrderSide::Buy,
-        qty: Quantity(dec!(50)),
-        price_limit: Some(Price(dec!(3500.00))),
+        qty: Quantity::try_new(dec!(50)).unwrap(),
+        price_limit: Some(Price::try_new(dec!(3500.00)).unwrap()),
         algo_id: "ALGO_01".into(),
         rationale: None,
     };
@@ -207,8 +207,8 @@ fn test_pre_trade_risk_engine_integration() {
     let oversized_decision = Decision::PlaceOrder {
         symbol: "TCS".into(),
         side: OrderSide::Buy,
-        qty: Quantity(dec!(500)), // Limit is 100
-        price_limit: Some(Price(dec!(3500.00))),
+        qty: Quantity::try_new(dec!(500)).unwrap(), // Limit is 100
+        price_limit: Some(Price::try_new(dec!(3500.00)).unwrap()),
         algo_id: "ALGO_01".into(),
         rationale: None,
     };
@@ -216,19 +216,20 @@ fn test_pre_trade_risk_engine_integration() {
     assert!(matches!(refusal, Err(DecisionError::RiskRejected(_))));
 
     // 3. Price band violation
-    let inst = InstrumentId::new(Exchange::Nse, "INFY");
-    let band = PriceBand::new(
-        Price(dec!(1350.00)),
-        Price(dec!(1650.00)),
-        Price(dec!(1500.00)),
-    );
+    let inst = InstrumentId::try_new(Exchange::Nse, "INFY").unwrap();
+    let band = PriceBand::try_new(
+        Price::try_new(dec!(1350.00)).unwrap(),
+        Price::try_new(dec!(1650.00)).unwrap(),
+        Price::try_new(dec!(1500.00)).unwrap(),
+    )
+    .unwrap();
     risk_engine.set_price_band(inst, band);
 
     let out_of_band = Decision::PlaceOrder {
         symbol: "INFY".into(),
         side: OrderSide::Buy,
-        qty: Quantity(dec!(10)),
-        price_limit: Some(Price(dec!(1800.00))), // Outside upper band 1650
+        qty: Quantity::try_new(dec!(10)).unwrap(),
+        price_limit: Some(Price::try_new(dec!(1800.00)).unwrap()), // Outside upper band 1650
         algo_id: "ALGO_01".into(),
         rationale: None,
     };
@@ -304,14 +305,14 @@ fn test_deterministic_prompt_replayer() {
     // Sequential replay
     let orders1 = replayer.next_orders();
     assert_eq!(orders1.len(), 1);
-    assert_eq!(orders1[0].instrument.symbol, "RELIANCE");
-    assert_eq!(orders1[0].quantity.0, dec!(20));
+    assert_eq!(orders1[0].instrument.symbol(), "RELIANCE");
+    assert_eq!(orders1[0].quantity.value(), dec!(20));
     assert_eq!(orders1[0].algo_id, "REPLAY_ALGO");
 
     let orders2 = replayer.next_orders();
     assert_eq!(orders2.len(), 1);
-    assert_eq!(orders2[0].instrument.symbol, "TCS");
-    assert_eq!(orders2[0].quantity.0, dec!(15));
+    assert_eq!(orders2[0].instrument.symbol(), "TCS");
+    assert_eq!(orders2[0].quantity.value(), dec!(15));
 
     // End of stream
     assert!(replayer.next_orders().is_empty());
@@ -320,5 +321,5 @@ fn test_deterministic_prompt_replayer() {
     replayer.reset();
     let re_orders1 = replayer.next_orders();
     assert_eq!(re_orders1.len(), 1);
-    assert_eq!(re_orders1[0].instrument.symbol, "RELIANCE");
+    assert_eq!(re_orders1[0].instrument.symbol(), "RELIANCE");
 }

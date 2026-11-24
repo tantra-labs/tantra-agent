@@ -48,7 +48,7 @@ pub enum DecisionError {
     },
 
     /// Scrip-wise price band circuit violation
-    #[error("Price band circuit violation: price {price} is outside circuit bounds [{lower}, {upper}]", lower = band.lower, upper = band.upper)]
+    #[error("Price band circuit violation: price {price} is outside circuit bounds [{lower}, {upper}]", lower = band.lower(), upper = band.upper())]
     PriceBandViolation {
         /// Attempted price
         price: Price,

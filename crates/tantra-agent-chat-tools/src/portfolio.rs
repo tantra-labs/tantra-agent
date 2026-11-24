@@ -124,13 +124,13 @@ impl ChatTool for PortfolioViewTool {
             let mut valuation_available = self.market.is_some();
 
             for pos in &positions {
-                let cost = pos.quantity.0 * pos.avg_price.0;
+                let cost = pos.quantity.value() * pos.avg_price.value();
                 total_cost_basis += cost;
 
                 if let Some(ref mkt) = self.market {
                     match mkt.quote(&pos.instrument).await {
                         Ok(q) => {
-                            total_market_val += pos.quantity.0 * q.last_price.0;
+                            total_market_val += pos.quantity.value() * q.last_price.value();
                         }
                         Err(_) => {
                             valuation_available = false;
@@ -254,15 +254,15 @@ impl ChatTool for PositionsViewTool {
         let mut pos_records = Vec::new();
 
         for pos in positions {
-            let cost_basis = pos.quantity.0 * pos.avg_price.0;
+            let cost_basis = pos.quantity.value() * pos.avg_price.value();
 
             let valuation = if let Some(ref mkt) = self.market {
                 match mkt.quote(&pos.instrument).await {
                     Ok(q) => {
-                        let mkt_val = pos.quantity.0 * q.last_price.0;
+                        let mkt_val = pos.quantity.value() * q.last_price.value();
                         let unrl_pnl = mkt_val - cost_basis;
                         serde_json::json!({
-                            "last_price": q.last_price.0,
+                            "last_price": q.last_price.value(),
                             "market_value": mkt_val,
                             "unrealized_pnl": unrl_pnl,
                         })
@@ -279,8 +279,8 @@ impl ChatTool for PositionsViewTool {
                     tantra_core::PositionSide::Long => "LONG",
                     tantra_core::PositionSide::Short => "SHORT",
                 },
-                "quantity": pos.quantity.0,
-                "avg_price": pos.avg_price.0,
+                "quantity": pos.quantity.value(),
+                "avg_price": pos.avg_price.value(),
                 "cost_basis": cost_basis,
                 "valuation": valuation,
                 "realized_pnl": pos.realized_pnl.amount,
@@ -394,10 +394,10 @@ impl ChatTool for OrdersViewTool {
                         tantra_core::OrderSide::Sell => "SELL",
                     },
                     "order_type": format!("{:?}", o.order_type),
-                    "price": o.price.map(|p| p.0),
-                    "quantity": o.quantity.0,
-                    "filled_quantity": o.filled_quantity.0,
-                    "avg_fill_price": o.avg_fill_price.map(|p| p.0),
+                    "price": o.price.map(|p| p.value()),
+                    "quantity": o.quantity.value(),
+                    "filled_quantity": o.filled_quantity.value(),
+                    "avg_fill_price": o.avg_fill_price.map(|p| p.value()),
                     "status": format!("{:?}", o.status),
                     "created_at": o.created_at,
                     "updated_at": o.updated_at,
@@ -498,9 +498,9 @@ impl ChatTool for TaxLotsViewTool {
                         tantra_core::PositionSide::Long => "LONG",
                         tantra_core::PositionSide::Short => "SHORT",
                     },
-                    "entry_price": l.entry_price.0,
-                    "original_quantity": l.quantity.0,
-                    "remaining_quantity": l.remaining_quantity.0,
+                    "entry_price": l.entry_price.value(),
+                    "original_quantity": l.quantity.value(),
+                    "remaining_quantity": l.remaining_quantity.value(),
                     "entry_date": l.entry_date,
                     "created_at": l.created_at,
                 })

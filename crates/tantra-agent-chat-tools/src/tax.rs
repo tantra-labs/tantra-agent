@@ -155,9 +155,9 @@ impl ChatTool for TaxReportTool {
                 serde_json::json!({
                     "lot_id": lot.lot_id,
                     "instrument": lot.instrument.to_string(),
-                    "quantity": lot.quantity.0,
-                    "entry_price": lot.entry_price.0,
-                    "exit_price": lot.exit_price.0,
+                    "quantity": lot.quantity.value(),
+                    "entry_price": lot.entry_price.value(),
+                    "exit_price": lot.exit_price.value(),
                     "realized_pnl": lot.realized_pnl.amount,
                     "holding_period_days": lot.holding_period_days,
                     "is_long_term": lot.is_long_term,

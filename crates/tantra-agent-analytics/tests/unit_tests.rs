@@ -15,7 +15,7 @@ use tantra_core::{
 };
 
 fn id() -> InstrumentId {
-    InstrumentId::new(Exchange::Nse, "X")
+    InstrumentId::try_new(Exchange::Nse, "X").unwrap()
 }
 
 fn ts(n: u64) -> DateTime<Utc> {
@@ -26,9 +26,9 @@ fn trip(entry: f64, exit: f64, qty: f64) -> RoundTrip {
     RoundTrip::new(
         id(),
         OrderSide::Buy,
-        Quantity(Decimal::from_f64_retain(qty).unwrap()),
-        Price(Decimal::from_f64_retain(entry).unwrap()),
-        Price(Decimal::from_f64_retain(exit).unwrap()),
+        Quantity::try_new(Decimal::from_f64_retain(qty).unwrap()).unwrap(),
+        Price::try_new(Decimal::from_f64_retain(entry).unwrap()).unwrap(),
+        Price::try_new(Decimal::from_f64_retain(exit).unwrap()).unwrap(),
         ts(1),
         ts(2),
         dec!(0),
@@ -83,8 +83,8 @@ fn round_trip_from_fills_pairs_buy_then_sell() {
         Uuid::new_v4(),
         id(),
         OrderSide::Buy,
-        Price(dec!(100)),
-        Quantity(dec!(10)),
+        Price::try_new(dec!(100)).unwrap(),
+        Quantity::try_new(dec!(10)).unwrap(),
         "ALGO_TEST",
         ts(1),
         "default",
@@ -96,8 +96,8 @@ fn round_trip_from_fills_pairs_buy_then_sell() {
         Uuid::new_v4(),
         id(),
         OrderSide::Sell,
-        Price(dec!(110)),
-        Quantity(dec!(10)),
+        Price::try_new(dec!(110)).unwrap(),
+        Quantity::try_new(dec!(10)).unwrap(),
         "ALGO_TEST",
         ts(2),
         "default",
@@ -118,8 +118,8 @@ fn round_trip_from_fills_short_profits_on_decline() {
         Uuid::new_v4(),
         id(),
         OrderSide::Sell,
-        Price(dec!(110)),
-        Quantity(dec!(10)),
+        Price::try_new(dec!(110)).unwrap(),
+        Quantity::try_new(dec!(10)).unwrap(),
         "ALGO_TEST",
         ts(1),
         "default",
@@ -130,8 +130,8 @@ fn round_trip_from_fills_short_profits_on_decline() {
         Uuid::new_v4(),
         id(),
         OrderSide::Buy,
-        Price(dec!(100)),
-        Quantity(dec!(10)),
+        Price::try_new(dec!(100)).unwrap(),
+        Quantity::try_new(dec!(10)).unwrap(),
         "ALGO_TEST",
         ts(2),
         "default",
@@ -148,8 +148,8 @@ fn fill(side: OrderSide, n: u64, costs: Money) -> FillReport {
         Uuid::new_v4(),
         id(),
         side,
-        Price(dec!(100)),
-        Quantity(dec!(10)),
+        Price::try_new(dec!(100)).unwrap(),
+        Quantity::try_new(dec!(10)).unwrap(),
         "ALGO_TEST",
         ts(n),
         "default",

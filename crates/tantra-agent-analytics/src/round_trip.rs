@@ -82,12 +82,12 @@ impl RoundTrip {
             })?;
 
         let gross_pnl = match side {
-            OrderSide::Buy => (exit_price.0 - entry_price.0) * quantity.0,
-            OrderSide::Sell => (entry_price.0 - exit_price.0) * quantity.0,
+            OrderSide::Buy => (exit_price.value() - entry_price.value()) * quantity.value(),
+            OrderSide::Sell => (entry_price.value() - exit_price.value()) * quantity.value(),
         };
 
         let net_pnl = gross_pnl - fees;
-        let entry_notional = entry_price.0 * quantity.0;
+        let entry_notional = entry_price.value() * quantity.value();
         let pnl_pct = if entry_notional != dec!(0) {
             (net_pnl / entry_notional).try_into().unwrap_or(0.0)
         } else {
@@ -124,11 +124,11 @@ impl RoundTrip {
         fees: Decimal,
     ) -> Self {
         let gross_pnl = match side {
-            OrderSide::Buy => (exit_price.0 - entry_price.0) * quantity.0,
-            OrderSide::Sell => (entry_price.0 - exit_price.0) * quantity.0,
+            OrderSide::Buy => (exit_price.value() - entry_price.value()) * quantity.value(),
+            OrderSide::Sell => (entry_price.value() - exit_price.value()) * quantity.value(),
         };
         let net_pnl = gross_pnl - fees;
-        let entry_notional = entry_price.0 * quantity.0;
+        let entry_notional = entry_price.value() * quantity.value();
         let pnl_pct = if entry_notional != dec!(0) {
             (net_pnl / entry_notional).try_into().unwrap_or(0.0)
         } else {

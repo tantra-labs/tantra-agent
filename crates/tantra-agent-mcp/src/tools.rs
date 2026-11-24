@@ -1782,8 +1782,10 @@ impl DerivativesToolService {
         };
 
         let params = PriceParams {
-            spot: Price::new(spot),
-            strike: Price::new(strike),
+            spot: Price::try_new(spot)
+                .map_err(|e| McpError::InvalidArguments(format!("invalid spot: {e}")))?,
+            strike: Price::try_new(strike)
+                .map_err(|e| McpError::InvalidArguments(format!("invalid strike: {e}")))?,
             time_to_expiry: t_years,
             risk_free_rate,
             dividend_yield,
@@ -2746,7 +2748,7 @@ impl AllocationToolService {
         for inst in &instruments {
             let w = target.weights.get(inst).copied().unwrap_or(Decimal::ZERO);
             weights_vec.push(w);
-            weights_map.insert(inst.symbol.clone(), w);
+            weights_map.insert(inst.symbol().to_string(), w);
         }
 
         // Portfolio Expected Return: w^T * mu
@@ -2788,7 +2790,7 @@ impl AllocationToolService {
             .iter()
             .zip(&weights_vec)
             .map(|(inst, &w)| AssetWeightResult {
-                symbol: inst.symbol.clone(),
+                symbol: inst.symbol().to_string(),
                 weight: w,
                 percentage: format!("{:.2}%", w * Decimal::from(100)),
             })
@@ -2956,7 +2958,7 @@ impl AllocationToolService {
                     .target_weights
                     .iter()
                     .map(|(inst, &w)| MpoWeightResult {
-                        instrument: inst.symbol.clone(),
+                        instrument: inst.symbol().to_string(),
                         weight: w,
                     })
                     .collect(),
@@ -3152,8 +3154,11 @@ fn parse_allocation_input(
 
     let instruments: Vec<InstrumentId> = symbols
         .iter()
-        .map(|s| InstrumentId::new(Exchange::Nse, s.clone()))
-        .collect();
+        .map(|s| {
+            InstrumentId::try_new(Exchange::Nse, s)
+                .map_err(|e| McpError::InvalidArguments(format!("invalid symbol {s}: {e}")))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
 
     let mut exp_returns_map = BTreeMap::new();
     if let Some(ref rets) = expected_returns {
@@ -3185,7 +3190,7 @@ fn parse_allocation_input(
             let inst = if let Some(sym) = b.get("instrument").and_then(|v| v.as_str()) {
                 instruments
                     .iter()
-                    .find(|id| id.symbol.eq_ignore_ascii_case(sym))
+                    .find(|id| id.symbol().eq_ignore_ascii_case(sym))
                     .cloned()
                     .ok_or_else(|| {
                         McpError::InvalidArguments(format!(

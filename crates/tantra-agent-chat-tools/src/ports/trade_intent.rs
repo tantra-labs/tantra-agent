@@ -63,5 +63,5 @@ pub fn intent_notional(intent: &TradeIntent) -> Option<Money> {
         ("limit", Some(p)) => p,
         _ => return None,
     };
-    Some(Money::inr(price.0 * intent.quantity.0))
+    Some(Money::inr(price.value() * intent.quantity.value()))
 }

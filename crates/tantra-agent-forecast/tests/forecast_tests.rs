@@ -204,8 +204,8 @@ fn test_fit_and_forecast_rejects_short_series() {
 
 #[test]
 fn test_panel_forecast_carries_series_keys() {
-    let tcs = InstrumentId::new(tantra_core::Exchange::Nse, "TCS");
-    let rel = InstrumentId::new(tantra_core::Exchange::Nse, "RELIANCE");
+    let tcs = InstrumentId::try_new(tantra_core::Exchange::Nse, "TCS").unwrap();
+    let rel = InstrumentId::try_new(tantra_core::Exchange::Nse, "RELIANCE").unwrap();
     let panel = vec![
         (tcs.clone(), quant(&[10.0, 11.0, 12.0, 13.0])),
         (rel.clone(), quant(&[100.0, 102.0, 101.0, 103.0])),

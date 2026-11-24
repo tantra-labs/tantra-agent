@@ -79,8 +79,8 @@ impl ChatTool for IpoCalendarTool {
                     "company_name": i.company_name,
                     "open_date": i.open_date,
                     "close_date": i.close_date,
-                    "price_min": i.price_min.map(|p| p.0),
-                    "price_max": i.price_max.map(|p| p.0),
+                    "price_min": i.price_min.map(|p| p.value()),
+                    "price_max": i.price_max.map(|p| p.value()),
                     "lot_size": i.lot_size,
                     "issue_size": i.issue_size.map(|m| m.amount),
                 })
