@@ -136,7 +136,7 @@ impl ChatTool for ExperimentalStudySummaryTool {
 
         let Some(reader) = &self.study else {
             return Err(PortError::unavailable(
-                "experimental study reader is not wired in this runtime context; use POST /api/v2/experimental-analysis/returns or attach FeedStudyReader",
+                "experimental study reader is not wired in this runtime context; use POST /api/v2/studies/experimental-analysis/returns or attach FeedStudyReader",
             )
             .into_tool_error("experimental_study_summary"));
         };
