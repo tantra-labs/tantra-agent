@@ -3,6 +3,8 @@
 //! Persists jobs at a caller-supplied SQLite URL. Job specs and results are stored
 //! as JSON; queryable fields are denormalized into columns.
 
+use sqlx::Row as _;
+
 use crate::jobs::spec::{Job, JobId, JobResult, JobSpec, JobStatus};
 use crate::jobs::store::{JobStore, JobStoreError};
 

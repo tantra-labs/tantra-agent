@@ -43,7 +43,7 @@ async fn test_report_narrate_against_omniroute() {
     report.add_metric(Metric::new("Sharpe", "1.42"));
     report.add_metric(Metric::new("Max drawdown", "-8.3%"));
 
-    let narrative = narrate_report(&provider, &report)
+    let narrative = narrate_report(provider.as_ref(), &report)
         .await
         .expect("narrative from live router");
     assert!(!narrative.trim().is_empty());
