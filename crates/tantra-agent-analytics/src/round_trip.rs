@@ -66,17 +66,18 @@ impl RoundTrip {
             }
         };
 
-        if entry.fee.currency != exit.fee.currency {
+        if entry.fee.currency() != exit.fee.currency() {
             return Err(AnalyticsError::TradeMismatch(format!(
                 "cannot sum fees in different currencies ({} vs {})",
-                entry.fee.currency, exit.fee.currency
+                entry.fee.currency(),
+                exit.fee.currency()
             )));
         }
 
         let fees = entry
             .fee
-            .amount
-            .checked_add(exit.fee.amount)
+            .amount()
+            .checked_add(exit.fee.amount())
             .ok_or_else(|| {
                 AnalyticsError::TradeMismatch("cannot sum fees: decimal overflow".into())
             })?;

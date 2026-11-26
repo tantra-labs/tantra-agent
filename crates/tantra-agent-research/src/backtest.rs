@@ -224,7 +224,7 @@ impl ParityBacktestRunner {
                 executed_price,
                 true, // Delivery equity
             );
-            let total_fee_amount = fees.total().amount;
+            let total_fee_amount = fees.total().amount();
             total_fees += total_fee_amount;
 
             // T+1 Demat settlement date

@@ -3222,12 +3222,12 @@ async fn test_tax_and_statement_tools() {
         .await
         .unwrap();
     let summary = compute_capital_gains(&lots);
-    assert_eq!(summary.stcg_pnl.amount, dec!(50000.0));
-    assert_eq!(summary.ltcg_pnl.amount, dec!(4000.0));
-    assert_eq!(summary.stcg_tax.amount, dec!(10000.0));
-    assert_eq!(summary.ltcg_taxable.amount, Decimal::ZERO);
-    assert_eq!(summary.ltcg_tax.amount, Decimal::ZERO);
-    assert_eq!(summary.total_tax.amount, dec!(10000.0));
+    assert_eq!(summary.stcg_pnl.amount(), dec!(50000.0));
+    assert_eq!(summary.ltcg_pnl.amount(), dec!(4000.0));
+    assert_eq!(summary.stcg_tax.amount(), dec!(10000.0));
+    assert_eq!(summary.ltcg_taxable.amount(), Decimal::ZERO);
+    assert_eq!(summary.ltcg_tax.amount(), Decimal::ZERO);
+    assert_eq!(summary.total_tax.amount(), dec!(10000.0));
 
     // 2. Statement formatting is a markdown table containing the lots + summary.
     let statement = format_ledger_statement(&lots);

@@ -83,7 +83,7 @@ impl ChatTool for FundSearchTool {
                     "scheme_code": f.scheme_code,
                     "scheme_name": f.scheme_name,
                     "category": f.category,
-                    "nav": f.nav.map(|m| m.amount),
+                    "nav": f.nav.map(|m| m.amount()),
                     "cagr_1y_pct": f.cagr_1y_pct,
                     "cagr_3y_pct": f.cagr_3y_pct,
                     "cagr_5y_pct": f.cagr_5y_pct,

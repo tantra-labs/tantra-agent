@@ -47,12 +47,12 @@ pub struct TaxSummary {
 pub fn compute_capital_gains(lots: &[ClosedLotRecord]) -> TaxSummary {
     let currency = lots
         .first()
-        .map(|lot| lot.realized_pnl.currency)
+        .map(|lot| lot.realized_pnl.currency())
         .unwrap_or(Currency::Inr);
     let mut stcg_pnl = Decimal::ZERO;
     let mut ltcg_pnl = Decimal::ZERO;
     for lot in lots {
-        let pnl = lot.realized_pnl.amount;
+        let pnl = lot.realized_pnl.amount();
         if lot.is_long_term {
             ltcg_pnl += pnl;
         } else {
@@ -158,7 +158,7 @@ impl ChatTool for TaxReportTool {
                     "quantity": lot.quantity.value(),
                     "entry_price": lot.entry_price.value(),
                     "exit_price": lot.exit_price.value(),
-                    "realized_pnl": lot.realized_pnl.amount,
+                    "realized_pnl": lot.realized_pnl.amount(),
                     "holding_period_days": lot.holding_period_days,
                     "is_long_term": lot.is_long_term,
                 })
@@ -170,12 +170,12 @@ impl ChatTool for TaxReportTool {
             serde_json::json!({
                 "account": args.account,
                 "summary": {
-                    "stcg_pnl": summary.stcg_pnl.amount,
-                    "ltcg_pnl": summary.ltcg_pnl.amount,
-                    "stcg_tax": summary.stcg_tax.amount,
-                    "ltcg_taxable": summary.ltcg_taxable.amount,
-                    "ltcg_tax": summary.ltcg_tax.amount,
-                    "total_tax": summary.total_tax.amount,
+                    "stcg_pnl": summary.stcg_pnl.amount(),
+                    "ltcg_pnl": summary.ltcg_pnl.amount(),
+                    "stcg_tax": summary.stcg_tax.amount(),
+                    "ltcg_taxable": summary.ltcg_taxable.amount(),
+                    "ltcg_tax": summary.ltcg_tax.amount(),
+                    "total_tax": summary.total_tax.amount(),
                 },
                 "lots": lots_json,
                 "count": lots_json.len(),

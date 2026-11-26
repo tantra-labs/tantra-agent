@@ -82,7 +82,7 @@ impl ChatTool for IpoCalendarTool {
                     "price_min": i.price_min.map(|p| p.value()),
                     "price_max": i.price_max.map(|p| p.value()),
                     "lot_size": i.lot_size,
-                    "issue_size": i.issue_size.map(|m| m.amount),
+                    "issue_size": i.issue_size.map(|m| m.amount()),
                 })
             })
             .collect();

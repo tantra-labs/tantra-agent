@@ -42,19 +42,19 @@ pub fn format_ledger_statement(lots: &[ClosedLotRecord]) -> String {
             lot.quantity.value(),
             lot.entry_price.value(),
             lot.exit_price.value(),
-            lot.realized_pnl.amount,
+            lot.realized_pnl.amount(),
             lot.holding_period_days,
             if lot.is_long_term { "LT" } else { "ST" }
         ));
     }
     out.push_str(&format!(
         "\n**Summary** — STCG: {} | LTCG: {} | STCG tax (20%): {} | LTCG taxable: {} | LTCG tax (12.5%): {} | **Total tax: {}**\n",
-        summary.stcg_pnl.amount,
-        summary.ltcg_pnl.amount,
-        summary.stcg_tax.amount,
-        summary.ltcg_taxable.amount,
-        summary.ltcg_tax.amount,
-        summary.total_tax.amount
+        summary.stcg_pnl.amount(),
+        summary.ltcg_pnl.amount(),
+        summary.stcg_tax.amount(),
+        summary.ltcg_taxable.amount(),
+        summary.ltcg_tax.amount(),
+        summary.total_tax.amount()
     ));
     out
 }

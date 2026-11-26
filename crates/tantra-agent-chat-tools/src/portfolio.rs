@@ -152,11 +152,11 @@ impl ChatTool for PortfolioViewTool {
                 "account_id": acc.account_id.to_string(),
                 "algo_id": acc.algo_id.map(|a| a.to_string()),
                 "status": acc.status,
-                "cash": cash.iter().map(|m| serde_json::json!({ "amount": m.amount, "currency": m.currency.code() })).collect::<Vec<_>>(),
+                "cash": cash.iter().map(|m| serde_json::json!({ "amount": m.amount(), "currency": m.currency().code() })).collect::<Vec<_>>(),
                 "open_positions_count": positions.len(),
                 "cost_basis": total_cost_basis,
                 "valuation": valuation_payload,
-                "realized_pnl": { "amount": realized.amount, "currency": realized.currency.code() },
+                "realized_pnl": { "amount": realized.amount(), "currency": realized.currency().code() },
                 "updated_at": acc.updated_at,
             }));
         }
@@ -283,7 +283,7 @@ impl ChatTool for PositionsViewTool {
                 "avg_price": pos.avg_price.value(),
                 "cost_basis": cost_basis,
                 "valuation": valuation,
-                "realized_pnl": pos.realized_pnl.amount,
+                "realized_pnl": pos.realized_pnl.amount(),
                 "tax_lots_count": pos.lots.len(),
                 "updated_at": pos.updated_at,
             }));
@@ -594,8 +594,8 @@ impl ChatTool for PnlViewTool {
             "pnl_view",
             serde_json::json!({
                 "account": args.account,
-                "realized_pnl": realized.amount,
-                "currency": realized.currency.code(),
+                "realized_pnl": realized.amount(),
+                "currency": realized.currency().code(),
                 "start": start_dt,
                 "end": end_dt,
             }),

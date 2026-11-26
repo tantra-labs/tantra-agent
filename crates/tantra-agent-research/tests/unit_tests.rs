@@ -98,20 +98,20 @@ fn test_indian_statutory_costs_exactness() {
         IndianStatutoryCostCalculator::compute_cash_equity_fees(OrderSide::Buy, qty, price, true);
 
     // Brokerage is min(0.0003 * 250,000 = ₹75, ₹20) -> ₹20
-    assert_eq!(buy_fees.brokerage.amount, dec!(20.0));
+    assert_eq!(buy_fees.brokerage.amount(), dec!(20.0));
     // STT delivery buy 0.1% of 250,000 -> ₹250
-    assert_eq!(buy_fees.stt.amount, dec!(250.0));
+    assert_eq!(buy_fees.stt.amount(), dec!(250.0));
     // Exchange charges 0.00297% of 250,000 = 7.425 -> rounded half to even is ₹7.42
-    assert_eq!(buy_fees.exchange_charges.amount, dec!(7.42));
+    assert_eq!(buy_fees.exchange_charges.amount(), dec!(7.42));
     // Stamp duty 0.015% of 250,000 -> ₹37.50
-    assert_eq!(buy_fees.stamp_duty.amount, dec!(37.50));
+    assert_eq!(buy_fees.stamp_duty.amount(), dec!(37.50));
     // SEBI charges ₹10/crore -> ₹0.25
-    assert_eq!(buy_fees.sebi_charges.amount, dec!(0.25));
+    assert_eq!(buy_fees.sebi_charges.amount(), dec!(0.25));
 
-    let total = buy_fees.total().amount;
+    let total = buy_fees.total().amount();
     assert!(total > dec!(300.0));
     assert_eq!(
-        buy_fees.brokerage.currency,
+        buy_fees.brokerage.currency(),
         tantra_core::types::Currency::Inr
     );
 
@@ -119,9 +119,9 @@ fn test_indian_statutory_costs_exactness() {
     let sell_fees =
         IndianStatutoryCostCalculator::compute_cash_equity_fees(OrderSide::Sell, qty, price, true);
     // Stamp duty is 0 on sell
-    assert_eq!(sell_fees.stamp_duty.amount, dec!(0.0));
+    assert_eq!(sell_fees.stamp_duty.amount(), dec!(0.0));
     // STT is 0.1% on delivery sell
-    assert_eq!(sell_fees.stt.amount, dec!(250.0));
+    assert_eq!(sell_fees.stt.amount(), dec!(250.0));
 }
 
 #[test]

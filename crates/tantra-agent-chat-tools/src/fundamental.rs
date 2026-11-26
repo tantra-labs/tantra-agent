@@ -172,9 +172,9 @@ impl ChatTool for FinancialStatementsTool {
                     "instrument": s.instrument.to_string(),
                     "statement_type": s.statement_type,
                     "fiscal_quarter": s.fiscal_quarter,
-                    "revenue": s.revenue.map(|m| m.amount),
-                    "operating_profit": s.operating_profit.map(|m| m.amount),
-                    "net_income": s.net_income.map(|m| m.amount),
+                    "revenue": s.revenue.map(|m| m.amount()),
+                    "operating_profit": s.operating_profit.map(|m| m.amount()),
+                    "net_income": s.net_income.map(|m| m.amount()),
                     "eps": s.eps,
                 })
             })

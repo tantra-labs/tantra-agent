@@ -810,7 +810,7 @@ impl ChatTool for CorporateActionsTool {
                     "action_type": a.action_type,
                     "ex_date": a.ex_date,
                     "record_date": a.record_date,
-                    "amount": a.amount.map(|m| m.amount),
+                    "amount": a.amount.map(|m| m.amount()),
                     "ratio_from": a.ratio_from.map(|q| q.value()),
                     "ratio_to": a.ratio_to.map(|q| q.value()),
                 })
@@ -1017,9 +1017,9 @@ impl ChatTool for InstitutionalFlowsTool {
             .map(|f| {
                 serde_json::json!({
                     "category": f.category,
-                    "buy_value": f.buy_value.amount,
-                    "sell_value": f.sell_value.amount,
-                    "net_value": f.net_value.amount,
+                    "buy_value": f.buy_value.amount(),
+                    "sell_value": f.sell_value.amount(),
+                    "net_value": f.net_value.amount(),
                     "trade_date": f.trade_date,
                 })
             })
