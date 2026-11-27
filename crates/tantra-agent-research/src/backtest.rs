@@ -12,6 +12,7 @@ use rust_decimal_macros::dec;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 
+use tantra_core::CoreError;
 use tantra_core::order::{FeeBreakdown, OrderSide};
 use tantra_core::types::Money;
 
@@ -200,7 +201,7 @@ impl ParityBacktestRunner {
     pub fn run_simulation(
         starting_cash: Decimal,
         fills_spec: &[FillSpec<'_>],
-    ) -> ParityBacktestOutcome {
+    ) -> Result<ParityBacktestOutcome, CoreError> {
         let backtest_id = uuid::Uuid::new_v4().to_string();
         let mut cash = starting_cash;
         let mut total_fees = Decimal::ZERO;
@@ -224,7 +225,7 @@ impl ParityBacktestRunner {
                 executed_price,
                 true, // Delivery equity
             );
-            let total_fee_amount = fees.total().amount();
+            let total_fee_amount = fees.total()?.amount();
             total_fees += total_fee_amount;
 
             // T+1 Demat settlement date
@@ -304,7 +305,7 @@ impl ParityBacktestRunner {
             Decimal::ZERO
         };
 
-        ParityBacktestOutcome {
+        Ok(ParityBacktestOutcome {
             backtest_id,
             starting_cash,
             final_equity,
@@ -316,6 +317,6 @@ impl ParityBacktestRunner {
             average_slippage_bps: avg_slippage * dec!(100.0),
             trade_log,
             equity_history,
-        }
+        })
     }
 }

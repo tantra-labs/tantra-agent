@@ -108,7 +108,7 @@ fn test_indian_statutory_costs_exactness() {
     // SEBI charges ₹10/crore -> ₹0.25
     assert_eq!(buy_fees.sebi_charges.amount(), dec!(0.25));
 
-    let total = buy_fees.total().amount();
+    let total = buy_fees.total().expect("all-INR fees").amount();
     assert!(total > dec!(300.0));
     assert_eq!(
         buy_fees.brokerage.currency(),
@@ -148,7 +148,8 @@ fn test_isolated_parity_backtest_execution() {
         ),
     ];
 
-    let outcome = ParityBacktestRunner::run_simulation(dec!(1000000.0), &fills);
+    let outcome =
+        ParityBacktestRunner::run_simulation(dec!(1000000.0), &fills).expect("all-INR fees");
 
     assert_eq!(outcome.total_trades, 2);
     assert!(outcome.total_statutory_fees > dec!(0.0));
